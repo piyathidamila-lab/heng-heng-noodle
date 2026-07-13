@@ -24,6 +24,8 @@ type Props = {
   onClose: () => void;
   lines: CartLine[];
   total: number;
+  submitting: boolean;
+  qrMode: boolean;
   onAdd: (id: string) => void;
   onRemove: (id: string) => void;
   customer: CustomerInfo;
@@ -36,6 +38,8 @@ export function CartSheet({
   onClose,
   lines,
   total,
+  submitting,
+  qrMode,
   onAdd,
   onRemove,
   customer,
@@ -121,13 +125,27 @@ export function CartSheet({
             <Stack spacing={1.5}>
               <Typography variant="subtitle1">ข้อมูลผู้สั่ง</Typography>
 
-              <TextField
-                label="ชื่อผู้สั่ง"
-                size="small"
-                value={customer.name}
-                onChange={(e) => onChangeCustomer({ name: e.target.value })}
-                fullWidth
-              />
+              {qrMode ? (
+                <Stack
+                  direction="row"
+                  alignItems="center"
+                  spacing={1}
+                  sx={{ p: 1.5, borderRadius: 1.5, bgcolor: 'grey.100' }}
+                >
+                  <Typography variant="body2">
+                    สั่งโดย <strong>{customer.name}</strong> · โต๊ะ {customer.tableNumber}
+                  </Typography>
+                </Stack>
+              ) : (
+                <TextField
+                  label="ชื่อผู้สั่ง"
+                  size="small"
+                  value={customer.name}
+                  onChange={(e) => onChangeCustomer({ name: e.target.value })}
+                  fullWidth
+                />
+              )}
+
               <TextField
                 label="เบอร์โทรศัพท์"
                 size="small"
@@ -136,18 +154,20 @@ export function CartSheet({
                 fullWidth
               />
 
-              <RadioGroup
-                row
-                value={customer.orderType}
-                onChange={(e) =>
-                  onChangeCustomer({ orderType: e.target.value as CustomerInfo['orderType'] })
-                }
-              >
-                <FormControlLabel value="dine-in" control={<Radio />} label="ทานที่ร้าน" />
-                <FormControlLabel value="takeaway" control={<Radio />} label="กลับบ้าน" />
-              </RadioGroup>
+              {!qrMode && (
+                <RadioGroup
+                  row
+                  value={customer.orderType}
+                  onChange={(e) =>
+                    onChangeCustomer({ orderType: e.target.value as CustomerInfo['orderType'] })
+                  }
+                >
+                  <FormControlLabel value="dine-in" control={<Radio />} label="ทานที่ร้าน" />
+                  <FormControlLabel value="takeaway" control={<Radio />} label="กลับบ้าน" />
+                </RadioGroup>
+              )}
 
-              {customer.orderType === 'dine-in' && (
+              {!qrMode && customer.orderType === 'dine-in' && (
                 <TextField
                   label="หมายเลขโต๊ะ"
                   size="small"
@@ -182,6 +202,7 @@ export function CartSheet({
               variant="contained"
               size="large"
               disabled={!canConfirm}
+              loading={submitting}
               onClick={onConfirm}
               startIcon={<Iconify icon="solar:check-circle-bold" />}
             >

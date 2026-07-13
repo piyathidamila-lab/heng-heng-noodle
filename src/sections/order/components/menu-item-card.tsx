@@ -39,9 +39,12 @@ export function MenuItemCard({ item, quantity, onAdd, onRemove }: Props) {
           placeItems: 'center',
           fontSize: 28,
           bgcolor: 'grey.100',
+          backgroundImage: item.imageUrl ? `url(${item.imageUrl})` : undefined,
+          backgroundSize: 'cover',
+          backgroundPosition: 'center',
         }}
       >
-        {item.emoji}
+        {!item.imageUrl && item.emoji}
       </Box>
 
       <Box sx={{ flex: 1, minWidth: 0 }}>

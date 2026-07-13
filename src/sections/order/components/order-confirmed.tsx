@@ -48,7 +48,7 @@ export function OrderConfirmed({
         </Box>
         <Typography variant="h5">สั่งอาหารสำเร็จ!</Typography>
         <Typography sx={{ color: 'text.secondary' }}>
-          หมายเลขออเดอร์ #{orderNumber} · {fTime(orderTime)}
+          หมายเลขออเดอร์ {orderNumber} · {fTime(orderTime)}
         </Typography>
       </Stack>
 
