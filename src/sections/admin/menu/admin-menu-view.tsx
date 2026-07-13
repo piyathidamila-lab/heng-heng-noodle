@@ -1,6 +1,7 @@
 'use client';
 
 import type { MenuItemInput } from 'src/lib/menu-service';
+import type { MenuCategory } from 'src/lib/category-service';
 import type { MenuItem } from 'src/sections/order/menu-data';
 
 import { useState } from 'react';
@@ -18,8 +19,6 @@ import Typography from '@mui/material/Typography';
 
 import { Iconify } from 'src/components/iconify';
 
-import { MENU_CATEGORIES } from 'src/sections/order/menu-data';
-
 import { MenuItemFormDialog } from './menu-item-form-dialog';
 import { createMenuItem, deleteMenuItem, updateMenuItem } from './menu-actions';
 
@@ -27,14 +26,15 @@ import { createMenuItem, deleteMenuItem, updateMenuItem } from './menu-actions';
 
 type Props = {
   initialItems: MenuItem[];
+  categories: MenuCategory[];
 };
 
-export function AdminMenuView({ initialItems }: Props) {
+export function AdminMenuView({ initialItems, categories }: Props) {
   const [items, setItems] = useState(initialItems);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<MenuItem | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const [activeCategory, setActiveCategory] = useState(MENU_CATEGORIES[0].value);
+  const [activeCategory, setActiveCategory] = useState(categories[0]?.value ?? '');
 
   const openCreate = () => {
     setEditing(null);
@@ -105,7 +105,7 @@ export function AdminMenuView({ initialItems }: Props) {
         onChange={(_, value) => setActiveCategory(value)}
         sx={{ mb: 3, borderBottom: '1px solid', borderColor: 'divider' }}
       >
-        {MENU_CATEGORIES.map((category) => {
+        {categories.map((category) => {
           const count = items.filter((item) => item.category === category.value).length;
           return (
             <Tab
@@ -229,6 +229,7 @@ export function AdminMenuView({ initialItems }: Props) {
       <MenuItemFormDialog
         open={dialogOpen}
         editing={editing}
+        categories={categories}
         submitting={submitting}
         onClose={() => setDialogOpen(false)}
         onSubmit={handleSubmit}

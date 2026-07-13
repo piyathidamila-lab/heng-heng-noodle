@@ -2,6 +2,8 @@
 
 import type { MenuItem } from '../menu-data';
 import type { CartLine } from '../components/cart-sheet';
+import type { MenuCategory } from 'src/lib/category-service';
+import type { ShopSettings } from 'src/lib/shop-settings-service';
 
 import { useMemo, useState, useLayoutEffect } from 'react';
 
@@ -21,11 +23,11 @@ import { toast } from 'src/components/snackbar';
 import { Iconify } from 'src/components/iconify';
 
 import { placeOrder } from '../order-actions';
-import { MENU_CATEGORIES } from '../menu-data';
 import { CartSheet } from '../components/cart-sheet';
 import { MenuItemCard } from '../components/menu-item-card';
 import { TableNameGate } from '../components/table-name-gate';
 import { OrderConfirmed } from '../components/order-confirmed';
+import { BestSellerStrip } from '../components/best-seller-strip';
 import { TableOrdersPanel } from '../components/table-orders-panel';
 import { OrderHistoryPanel } from '../components/order-history-panel';
 import { getOrderHistory, addOrderToHistory } from '../order-history';
@@ -59,9 +61,12 @@ type ConfirmedOrder = {
 
 type Props = {
   items: MenuItem[];
+  categories: MenuCategory[];
+  bestSellers: MenuItem[];
+  shop: ShopSettings;
 };
 
-export function OrderView({ items }: Props) {
+export function OrderView({ items, categories, bestSellers, shop }: Props) {
   const searchParams = useSearchParams();
   const qrTable = searchParams.get('table')?.trim().slice(0, 20) || null;
 
@@ -70,7 +75,7 @@ export function OrderView({ items }: Props) {
   const [view, setView] = useState<'menu' | 'orders'>('menu');
   const [showHistory, setShowHistory] = useState(false);
 
-  const [activeCategory, setActiveCategory] = useState(MENU_CATEGORIES[0].value);
+  const [activeCategory, setActiveCategory] = useState(categories[0]?.value ?? '');
   const [quantities, setQuantities] = useState<Record<string, number>>({});
   const [cartOpen, setCartOpen] = useState(false);
   const [customer, setCustomer] = useState<CustomerInfo>(EMPTY_CUSTOMER);
@@ -82,7 +87,6 @@ export function OrderView({ items }: Props) {
       setTableName(getSavedTableName(qrTable));
     }
     setNameChecked(true);
-     
   }, [qrTable]);
 
   const cartLines: CartLine[] = useMemo(
@@ -182,7 +186,7 @@ export function OrderView({ items }: Props) {
     setQuantities({});
     setCustomer(EMPTY_CUSTOMER);
     setConfirmedOrder(null);
-    setActiveCategory(MENU_CATEGORIES[0].value);
+    setActiveCategory(categories[0]?.value ?? '');
   };
 
   if (!nameChecked) {
@@ -190,7 +194,7 @@ export function OrderView({ items }: Props) {
   }
 
   if (qrTable && !tableName) {
-    return <TableNameGate table={qrTable} onSubmit={handleNameSubmit} />;
+    return <TableNameGate table={qrTable} shopName={shop.name} onSubmit={handleNameSubmit} />;
   }
 
   if (confirmedOrder) {
@@ -221,7 +225,7 @@ export function OrderView({ items }: Props) {
         }}
       >
         <Stack direction="row" alignItems="flex-start" justifyContent="space-between">
-          <Typography variant="h5">เฮงเฮง ก๋วยเตี๋ยว</Typography>
+          <Typography variant="h5">{shop.name}</Typography>
           {!qrTable && (
             <IconButton
               onClick={() => setShowHistory(true)}
@@ -247,7 +251,7 @@ export function OrderView({ items }: Props) {
           </Stack>
         ) : (
           <Typography variant="body2" sx={{ mt: 0.5, opacity: 0.8 }}>
-            บ้านขามเรียง มหาสารคาม · สั่งอาหารได้เลย ไม่ต้องเข้าสู่ระบบ
+            {shop.address} · สั่งอาหารได้เลย ไม่ต้องเข้าสู่ระบบ
           </Typography>
         )}
 
@@ -272,6 +276,8 @@ export function OrderView({ items }: Props) {
         <TableOrdersPanel table={qrTable} currentName={tableName ?? ''} />
       ) : (
         <>
+          <BestSellerStrip items={bestSellers} quantities={quantities} onAdd={handleAdd} />
+
           <Stack
             direction="row"
             spacing={1}
@@ -286,7 +292,7 @@ export function OrderView({ items }: Props) {
               borderColor: 'grey.200',
             }}
           >
-            {MENU_CATEGORIES.map((category) => (
+            {categories.map((category) => (
               <Chip
                 key={category.value}
                 label={category.label}

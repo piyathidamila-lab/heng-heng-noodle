@@ -3,6 +3,7 @@ import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
 
 import { isAdminAuthenticated } from 'src/lib/admin-session';
+import { getShopSettings } from 'src/lib/shop-settings-service';
 
 import { AdminLoginView } from 'src/sections/admin/login/admin-login-view';
 
@@ -15,5 +16,7 @@ export default async function Page() {
     redirect('/admin/overview');
   }
 
-  return <AdminLoginView />;
+  const settings = await getShopSettings();
+
+  return <AdminLoginView shopName={settings.name} />;
 }

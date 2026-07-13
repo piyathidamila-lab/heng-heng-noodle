@@ -12,10 +12,11 @@ import Typography from '@mui/material/Typography';
 
 type Props = {
   table: string;
+  shopName: string;
   onSubmit: (name: string) => void;
 };
 
-export function TableNameGate({ table, onSubmit }: Props) {
+export function TableNameGate({ table, shopName, onSubmit }: Props) {
   const [name, setName] = useState('');
 
   const handleSubmit = (event: React.FormEvent) => {
@@ -41,7 +42,7 @@ export function TableNameGate({ table, onSubmit }: Props) {
       }}
     >
       <Box sx={{ fontSize: 56, mb: 2 }}>🍜</Box>
-      <Typography variant="h4">เฮงเฮง ก๋วยเตี๋ยว</Typography>
+      <Typography variant="h4">{shopName}</Typography>
       <Typography sx={{ mt: 1, opacity: 0.8 }}>โต๊ะ {table}</Typography>
 
       <Stack

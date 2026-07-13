@@ -1,6 +1,7 @@
 'use client';
 
 import type { MenuItemInput } from 'src/lib/menu-service';
+import type { MenuCategory } from 'src/lib/category-service';
 import type { MenuItem as MenuItemType } from 'src/sections/order/menu-data';
 
 import { useRef, useState, useEffect } from 'react';
@@ -22,32 +23,38 @@ import FormControlLabel from '@mui/material/FormControlLabel';
 import { toast } from 'src/components/snackbar';
 import { Iconify } from 'src/components/iconify';
 
-import { MENU_CATEGORIES } from 'src/sections/order/menu-data';
-
 import { uploadMenuItemImage } from './menu-actions';
 
 // ----------------------------------------------------------------------
 
-const EMPTY_FORM: MenuItemInput = {
-  category: 'noodle',
-  name: '',
-  description: '',
-  price: 0,
-  emoji: '🍜',
-  imageUrl: null,
-  isAvailable: true,
-};
-
 type Props = {
   open: boolean;
   editing: MenuItemType | null;
+  categories: MenuCategory[];
   submitting: boolean;
   onClose: () => void;
   onSubmit: (input: MenuItemInput) => void;
 };
 
-export function MenuItemFormDialog({ open, editing, submitting, onClose, onSubmit }: Props) {
-  const [form, setForm] = useState<MenuItemInput>(EMPTY_FORM);
+export function MenuItemFormDialog({
+  open,
+  editing,
+  categories,
+  submitting,
+  onClose,
+  onSubmit,
+}: Props) {
+  const emptyForm: MenuItemInput = {
+    category: categories[0]?.value ?? '',
+    name: '',
+    description: '',
+    price: 0,
+    emoji: '🍜',
+    imageUrl: null,
+    isAvailable: true,
+  };
+
+  const [form, setForm] = useState<MenuItemInput>(emptyForm);
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -64,9 +71,10 @@ export function MenuItemFormDialog({ open, editing, submitting, onClose, onSubmi
               imageUrl: editing.imageUrl,
               isAvailable: editing.isAvailable,
             }
-          : EMPTY_FORM
+          : emptyForm
       );
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, editing]);
 
   const canSubmit = form.name.trim().length > 0 && form.price >= 0 && !uploading;
@@ -95,12 +103,12 @@ export function MenuItemFormDialog({ open, editing, submitting, onClose, onSubmi
 
       <DialogContent>
         <Stack spacing={2.5} sx={{ pt: 1 }}>
-          <Stack direction="row" spacing={2} alignItems="center">
+          <Stack direction="column" spacing={2} alignItems="center">
             <Box
               onClick={handlePickFile}
               sx={{
-                width: 96,
-                height: 96,
+                width: 1,
+                height: 220,
                 flexShrink: 0,
                 borderRadius: 2,
                 display: 'grid',
@@ -116,11 +124,7 @@ export function MenuItemFormDialog({ open, editing, submitting, onClose, onSubmi
                 borderColor: 'grey.200',
               }}
             >
-              {uploading ? (
-                <CircularProgress size={28} />
-              ) : (
-                !form.imageUrl && form.emoji
-              )}
+              {uploading ? <CircularProgress size={28} /> : !form.imageUrl && form.emoji}
 
               {!uploading && form.imageUrl && (
                 <IconButton
@@ -172,15 +176,10 @@ export function MenuItemFormDialog({ open, editing, submitting, onClose, onSubmi
             select
             label="หมวดหมู่"
             value={form.category}
-            onChange={(e) =>
-              setForm((prev) => ({
-                ...prev,
-                category: e.target.value as MenuItemInput['category'],
-              }))
-            }
+            onChange={(e) => setForm((prev) => ({ ...prev, category: e.target.value }))}
             fullWidth
           >
-            {MENU_CATEGORIES.map((category) => (
+            {categories.map((category) => (
               <MenuItem key={category.value} value={category.value}>
                 {category.label}
               </MenuItem>

@@ -1,4 +1,4 @@
-import type { MenuItem, MenuCategoryValue } from 'src/sections/order/menu-data';
+import type { MenuItem } from 'src/sections/order/menu-data';
 
 import { getSupabaseAdmin } from './supabase-admin';
 import { getSupabasePublic } from './supabase-public';
@@ -10,7 +10,7 @@ const SELECT_COLUMNS =
 
 type MenuItemRow = {
   id: string;
-  category: MenuCategoryValue;
+  category: string;
   name: string;
   description: string;
   price: number;
@@ -65,7 +65,7 @@ export async function getAdminMenuItems(): Promise<MenuItem[]> {
 }
 
 export type MenuItemInput = {
-  category: MenuCategoryValue;
+  category: string;
   name: string;
   description: string;
   price: number;

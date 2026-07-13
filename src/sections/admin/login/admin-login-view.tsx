@@ -15,7 +15,11 @@ import { adminLoginAction } from './login-actions';
 
 // ----------------------------------------------------------------------
 
-export function AdminLoginView() {
+type Props = {
+  shopName: string;
+};
+
+export function AdminLoginView({ shopName }: Props) {
   const [state, formAction, pending] = useActionState(adminLoginAction, {});
 
   return (
@@ -46,7 +50,7 @@ export function AdminLoginView() {
           >
             🍜
           </Box>
-          <Typography variant="h5">เฮงเฮง ก๋วยเตี๋ยว</Typography>
+          <Typography variant="h5">{shopName}</Typography>
           <Typography variant="body2" sx={{ color: 'text.secondary' }}>
             เข้าสู่ระบบสำหรับแอดมิน
           </Typography>

@@ -37,7 +37,7 @@ export async function getTableBill(sessionId: string): Promise<TableBill> {
   let promptPayPayload: string | null = null;
   if (total > 0) {
     try {
-      promptPayPayload = getPromptPayPayload(total);
+      promptPayPayload = await getPromptPayPayload(total);
     } catch (error) {
       if (!(error instanceof PromptPayNotConfiguredError)) throw error;
     }

@@ -24,6 +24,15 @@ create table if not exists public.menu_items (
 -- re-running on a database created before photos were added
 alter table public.menu_items add column if not exists image_url text;
 
+-- re-running on a database created before the "best seller" strip was added
+alter table public.menu_items add column if not exists is_best_seller boolean not null default false;
+alter table public.menu_items add column if not exists best_seller_sort_order integer not null default 0;
+
+-- categories used to be a fixed ('noodle','side','drink') check constraint —
+-- now managed by admins via the menu_categories table below, so relax it to
+-- accept any value (existing rows keep working, no data migration needed).
+alter table public.menu_items drop constraint if exists menu_items_category_check;
+
 alter table public.menu_items enable row level security;
 
 -- Anyone (customers browsing the menu) may read menu items with the anon key.
@@ -36,6 +45,85 @@ create policy "menu_items are publicly readable"
 -- No insert/update/delete policies are defined for anon/authenticated on purpose:
 -- all writes go through the server using the service-role key (see src/lib/supabase),
 -- gated by the admin password check, so RLS denies writes from the browser entirely.
+
+create or replace function public.set_updated_at()
+returns trigger as $$
+begin
+  new.updated_at = now();
+  return new;
+end;
+$$ language plpgsql;
+
+drop trigger if exists menu_items_set_updated_at on public.menu_items;
+create trigger menu_items_set_updated_at
+  before update on public.menu_items
+  for each row
+  execute function public.set_updated_at();
+
+-- ----------------------------------------------------------------------
+-- menu_categories — admin-managed replacement for the old hardcoded
+-- ('noodle' | 'side' | 'drink') list. menu_items.category stores this
+-- table's `value` as plain text (no FK) so existing rows never needed
+-- to be migrated.
+-- ----------------------------------------------------------------------
+
+create table if not exists public.menu_categories (
+  id uuid primary key default gen_random_uuid(),
+  value text not null unique,
+  label text not null,
+  sort_order integer not null default 0,
+  created_at timestamptz not null default now()
+);
+
+alter table public.menu_categories enable row level security;
+
+drop policy if exists "menu_categories are publicly readable" on public.menu_categories;
+create policy "menu_categories are publicly readable"
+  on public.menu_categories for select
+  to anon, authenticated
+  using (true);
+
+-- Seed the 3 categories that already exist as menu_items.category text values.
+insert into public.menu_categories (value, label, sort_order)
+values
+  ('noodle', 'ก๋วยเตี๋ยว', 1),
+  ('side', 'ของทานเล่น', 2),
+  ('drink', 'เครื่องดื่ม', 3)
+on conflict (value) do nothing;
+
+-- ----------------------------------------------------------------------
+-- shop_settings — a single editable row of store info (name, address,
+-- contact, PromptPay id, opening hours). The `id boolean` trick keeps it
+-- to exactly one row: only `true` passes the check, and the primary key
+-- stops a second row with the same id from ever being inserted.
+-- ----------------------------------------------------------------------
+
+create table if not exists public.shop_settings (
+  id boolean primary key default true check (id),
+  name text not null default 'เฮงเฮง ก๋วยเตี๋ยว',
+  address text not null default 'บ้านขามเรียง มหาสารคาม',
+  phone text not null default '',
+  promptpay_id text not null default '',
+  open_time text not null default '',
+  close_time text not null default '',
+  updated_at timestamptz not null default now()
+);
+
+insert into public.shop_settings (id) values (true) on conflict (id) do nothing;
+
+alter table public.shop_settings enable row level security;
+
+drop policy if exists "shop_settings are publicly readable" on public.shop_settings;
+create policy "shop_settings are publicly readable"
+  on public.shop_settings for select
+  to anon, authenticated
+  using (true);
+
+drop trigger if exists shop_settings_set_updated_at on public.shop_settings;
+create trigger shop_settings_set_updated_at
+  before update on public.shop_settings
+  for each row
+  execute function public.set_updated_at();
 
 -- ----------------------------------------------------------------------
 -- table_sessions — one "open table" run from the first order until the
@@ -110,24 +198,6 @@ alter table public.order_items enable row level security;
 
 create index if not exists order_items_order_id_idx on public.order_items (order_id);
 create index if not exists orders_created_at_idx on public.orders (created_at desc);
-
--- ----------------------------------------------------------------------
--- keep menu_items.updated_at current on edit
--- ----------------------------------------------------------------------
-
-create or replace function public.set_updated_at()
-returns trigger as $$
-begin
-  new.updated_at = now();
-  return new;
-end;
-$$ language plpgsql;
-
-drop trigger if exists menu_items_set_updated_at on public.menu_items;
-create trigger menu_items_set_updated_at
-  before update on public.menu_items
-  for each row
-  execute function public.set_updated_at();
 
 -- ----------------------------------------------------------------------
 -- seed data — starter noodle menu (safe to skip/edit before running)
