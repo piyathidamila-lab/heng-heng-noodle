@@ -1,15 +1,14 @@
 import type { Metadata } from 'next';
 
-import { HomeView } from 'src/sections/home/view';
+import { OrderView } from 'src/sections/order/view';
 
 // ----------------------------------------------------------------------
 
 export const metadata: Metadata = {
-  title: `AKHAHAS'SRI`,
-  description:
-    'ฉลองขวัญ รำพัน รำพึง ความงดงามนั้น เป็นภวังค์ฝัน อันหนึ่ง บางคราวสาระนั้นก็ราวเลือนเร้นหาย จนคล้ายคลึง นิยายประโลมโลก',
+  title: 'สั่งอาหาร | เฮงเฮง ก๋วยเตี๋ยว',
+  description: 'สั่งอาหารออนไลน์จากเฮงเฮง ก๋วยเตี๋ยว บ้านขามเรียง มหาสารคาม',
 };
 
 export default function Page() {
-  return <HomeView />;
+  return <OrderView />;
 }
