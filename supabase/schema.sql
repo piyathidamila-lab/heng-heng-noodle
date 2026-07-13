@@ -106,8 +106,16 @@ create table if not exists public.shop_settings (
   promptpay_id text not null default '',
   open_time text not null default '',
   close_time text not null default '',
+  custom_order_enabled boolean not null default true,
+  custom_order_title text not null default 'ความอร่อยเลือกเองได้',
+  custom_order_steps jsonb not null default '[{"id":"noodle","title":"เลือกเส้น","options":[{"id":"noodle-1","label":"เส้นเล็ก","price":0},{"id":"noodle-2","label":"เส้นใหญ่","price":0},{"id":"noodle-3","label":"เส้นหมี่","price":0},{"id":"noodle-4","label":"วุ้นเส้น","price":0},{"id":"noodle-5","label":"มาม่า","price":0},{"id":"noodle-6","label":"บะหมี่","price":0}]},{"id":"topping","title":"เลือกเครื่อง","options":[{"id":"topping-1","label":"ลูกชิ้น","price":0},{"id":"topping-2","label":"หมูสด","price":0},{"id":"topping-3","label":"หมูเปื่อย","price":0},{"id":"topping-4","label":"ตับ","price":0}]},{"id":"size","title":"เลือกความจุใจ","options":[{"id":"size-1","label":"จุก","price":40},{"id":"size-2","label":"แน่น","price":50},{"id":"size-3","label":"แน่น...แน่น","price":60}]}]'::jsonb,
   updated_at timestamptz not null default now()
 );
+
+-- Re-running this schema upgrades databases created before custom orders existed.
+alter table public.shop_settings add column if not exists custom_order_enabled boolean not null default true;
+alter table public.shop_settings add column if not exists custom_order_title text not null default 'ความอร่อยเลือกเองได้';
+alter table public.shop_settings add column if not exists custom_order_steps jsonb not null default '[{"id":"noodle","title":"เลือกเส้น","options":[{"id":"noodle-1","label":"เส้นเล็ก","price":0},{"id":"noodle-2","label":"เส้นใหญ่","price":0},{"id":"noodle-3","label":"เส้นหมี่","price":0},{"id":"noodle-4","label":"วุ้นเส้น","price":0},{"id":"noodle-5","label":"มาม่า","price":0},{"id":"noodle-6","label":"บะหมี่","price":0}]},{"id":"topping","title":"เลือกเครื่อง","options":[{"id":"topping-1","label":"ลูกชิ้น","price":0},{"id":"topping-2","label":"หมูสด","price":0},{"id":"topping-3","label":"หมูเปื่อย","price":0},{"id":"topping-4","label":"ตับ","price":0}]},{"id":"size","title":"เลือกความจุใจ","options":[{"id":"size-1","label":"จุก","price":40},{"id":"size-2","label":"แน่น","price":50},{"id":"size-3","label":"แน่น...แน่น","price":60}]}]'::jsonb;
 
 insert into public.shop_settings (id) values (true) on conflict (id) do nothing;
 
@@ -124,6 +132,27 @@ create trigger shop_settings_set_updated_at
   before update on public.shop_settings
   for each row
   execute function public.set_updated_at();
+
+-- ----------------------------------------------------------------------
+-- restaurant_tables — admin-managed list of table labels, the single
+-- source of truth for both the printable QR sheet and the table-number
+-- dropdown customers who didn't scan a QR code pick from.
+-- ----------------------------------------------------------------------
+
+create table if not exists public.restaurant_tables (
+  id uuid primary key default gen_random_uuid(),
+  label text not null unique,
+  sort_order integer not null default 0,
+  created_at timestamptz not null default now()
+);
+
+alter table public.restaurant_tables enable row level security;
+
+drop policy if exists "restaurant_tables are publicly readable" on public.restaurant_tables;
+create policy "restaurant_tables are publicly readable"
+  on public.restaurant_tables for select
+  to anon, authenticated
+  using (true);
 
 -- ----------------------------------------------------------------------
 -- table_sessions — one "open table" run from the first order until the
@@ -171,6 +200,11 @@ create table if not exists public.orders (
 
 -- re-running on a database created before table sessions were added
 alter table public.orders add column if not exists session_id uuid references public.table_sessions (id) on delete set null;
+
+-- the order form no longer collects a phone number — relax the old
+-- requirement rather than dropping the column, so historical orders that
+-- have one keep it.
+alter table public.orders alter column customer_phone drop not null;
 
 alter table public.orders enable row level security;
 -- No policies for anon/authenticated: orders contain customer PII (name, phone) and

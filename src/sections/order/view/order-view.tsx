@@ -2,8 +2,10 @@
 
 import type { MenuItem } from '../menu-data';
 import type { CartLine } from '../components/cart-sheet';
+import type { IconifyName } from 'src/components/iconify';
 import type { MenuCategory } from 'src/lib/category-service';
-import type { ShopSettings } from 'src/lib/shop-settings-service';
+import type { RestaurantTable } from 'src/lib/table-service';
+import type { ShopSettings, CustomOrderSelection } from 'src/lib/shop-settings-service';
 
 import { useMemo, useState, useLayoutEffect } from 'react';
 
@@ -17,8 +19,9 @@ import Button from '@mui/material/Button';
 import IconButton from '@mui/material/IconButton';
 import Typography from '@mui/material/Typography';
 
-import { useSearchParams } from 'src/routes/hooks';
+import { useRouter, useSearchParams } from 'src/routes/hooks';
 
+import { Logo } from 'src/components/logo';
 import { toast } from 'src/components/snackbar';
 import { Iconify } from 'src/components/iconify';
 
@@ -27,8 +30,10 @@ import { CartSheet } from '../components/cart-sheet';
 import { MenuItemCard } from '../components/menu-item-card';
 import { TableNameGate } from '../components/table-name-gate';
 import { OrderConfirmed } from '../components/order-confirmed';
+import { QrScannerDialog } from '../components/qr-scanner-dialog';
 import { BestSellerStrip } from '../components/best-seller-strip';
 import { TableOrdersPanel } from '../components/table-orders-panel';
+import { CustomOrderDialog } from '../components/custom-order-dialog';
 import { OrderHistoryPanel } from '../components/order-history-panel';
 import { getOrderHistory, addOrderToHistory } from '../order-history';
 import { saveTableName, clearTableName, getSavedTableName } from '../table-session';
@@ -37,7 +42,6 @@ import { saveTableName, clearTableName, getSavedTableName } from '../table-sessi
 
 export type CustomerInfo = {
   name: string;
-  phone: string;
   orderType: 'dine-in' | 'takeaway';
   tableNumber: string;
   note: string;
@@ -45,7 +49,6 @@ export type CustomerInfo = {
 
 const EMPTY_CUSTOMER: CustomerInfo = {
   name: '',
-  phone: '',
   orderType: 'dine-in',
   tableNumber: '',
   note: '',
@@ -63,10 +66,12 @@ type Props = {
   items: MenuItem[];
   categories: MenuCategory[];
   bestSellers: MenuItem[];
+  tables: RestaurantTable[];
   shop: ShopSettings;
 };
 
-export function OrderView({ items, categories, bestSellers, shop }: Props) {
+export function OrderView({ items, categories, bestSellers, tables, shop }: Props) {
+  const router = useRouter();
   const searchParams = useSearchParams();
   const qrTable = searchParams.get('table')?.trim().slice(0, 20) || null;
 
@@ -74,9 +79,12 @@ export function OrderView({ items, categories, bestSellers, shop }: Props) {
   const [nameChecked, setNameChecked] = useState(false);
   const [view, setView] = useState<'menu' | 'orders'>('menu');
   const [showHistory, setShowHistory] = useState(false);
+  const [scannerOpen, setScannerOpen] = useState(false);
+  const [customOrderOpen, setCustomOrderOpen] = useState(false);
 
   const [activeCategory, setActiveCategory] = useState(categories[0]?.value ?? '');
   const [quantities, setQuantities] = useState<Record<string, number>>({});
+  const [customLines, setCustomLines] = useState<CartLine[]>([]);
   const [cartOpen, setCartOpen] = useState(false);
   const [customer, setCustomer] = useState<CustomerInfo>(EMPTY_CUSTOMER);
   const [confirmedOrder, setConfirmedOrder] = useState<ConfirmedOrder | null>(null);
@@ -90,11 +98,13 @@ export function OrderView({ items, categories, bestSellers, shop }: Props) {
   }, [qrTable]);
 
   const cartLines: CartLine[] = useMemo(
-    () =>
-      items
+    () => [
+      ...items
         .filter((item) => quantities[item.id] > 0)
         .map((item) => ({ item, quantity: quantities[item.id] })),
-    [items, quantities]
+      ...customLines,
+    ],
+    [customLines, items, quantities]
   );
 
   const totalQuantity = cartLines.reduce((sum, line) => sum + line.quantity, 0);
@@ -107,11 +117,52 @@ export function OrderView({ items, categories, bestSellers, shop }: Props) {
     : customer;
 
   const handleAdd = (id: string) => {
+    if (id.startsWith('custom-')) {
+      setCustomLines((prev) =>
+        prev.map((line) => (line.item.id === id ? { ...line, quantity: line.quantity + 1 } : line))
+      );
+      return;
+    }
     setQuantities((prev) => ({ ...prev, [id]: (prev[id] ?? 0) + 1 }));
   };
 
   const handleRemove = (id: string) => {
+    if (id.startsWith('custom-')) {
+      setCustomLines((prev) =>
+        prev.flatMap((line) => {
+          if (line.item.id !== id) return [line];
+          return line.quantity > 1 ? [{ ...line, quantity: line.quantity - 1 }] : [];
+        })
+      );
+      return;
+    }
     setQuantities((prev) => ({ ...prev, [id]: Math.max(0, (prev[id] ?? 0) - 1) }));
+  };
+
+  const handleAddCustomOrder = (
+    customization: CustomOrderSelection,
+    labels: string[],
+    price: number
+  ) => {
+    const id = `custom-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    setCustomLines((prev) => [
+      ...prev,
+      {
+        item: {
+          id,
+          category: 'custom',
+          name: shop.customOrder.title,
+          description: labels.join(' · '),
+          price,
+          emoji: '🍜',
+          imageUrl: null,
+          isAvailable: true,
+        },
+        quantity: 1,
+        customization,
+      },
+    ]);
+    toast.success('เพิ่มเมนูที่เลือกลงตะกร้าแล้ว');
   };
 
   const handleChangeCustomer = (patch: Partial<CustomerInfo>) => {
@@ -130,16 +181,24 @@ export function OrderView({ items, categories, bestSellers, shop }: Props) {
     setTableName(null);
   };
 
+  const handleScanTable = (label: string) => {
+    setScannerOpen(false);
+    router.push(`/?table=${encodeURIComponent(label)}`);
+  };
+
   const handleConfirm = async () => {
     setSubmitting(true);
     try {
       const result = await placeOrder({
         customerName: effectiveCustomer.name,
-        customerPhone: effectiveCustomer.phone,
         orderType: effectiveCustomer.orderType,
         tableNumber: effectiveCustomer.tableNumber,
         note: effectiveCustomer.note,
-        lines: cartLines.map((line) => ({ menuItemId: line.item.id, quantity: line.quantity })),
+        lines: cartLines.map((line) =>
+          line.customization
+            ? { quantity: line.quantity, customization: line.customization }
+            : { menuItemId: line.item.id, quantity: line.quantity }
+        ),
       });
 
       if (!result.ok) {
@@ -148,7 +207,8 @@ export function OrderView({ items, categories, bestSellers, shop }: Props) {
       }
 
       setQuantities({});
-      setCustomer((prev) => ({ ...prev, phone: qrTable ? '' : prev.phone, note: '' }));
+      setCustomLines([]);
+      setCustomer((prev) => ({ ...prev, note: '' }));
       setCartOpen(false);
 
       if (qrTable) {
@@ -162,7 +222,9 @@ export function OrderView({ items, categories, bestSellers, shop }: Props) {
           tableNumber: result.order.tableNumber,
           total: result.order.total,
           items: cartLines.map((line) => ({
-            name: line.item.name,
+            name: line.customization
+              ? `${line.item.name} (${line.item.description})`
+              : line.item.name,
             emoji: line.item.emoji,
             price: line.item.price,
             quantity: line.quantity,
@@ -184,6 +246,7 @@ export function OrderView({ items, categories, bestSellers, shop }: Props) {
 
   const handleNewOrder = () => {
     setQuantities({});
+    setCustomLines([]);
     setCustomer(EMPTY_CUSTOMER);
     setConfirmedOrder(null);
     setActiveCategory(categories[0]?.value ?? '');
@@ -225,7 +288,15 @@ export function OrderView({ items, categories, bestSellers, shop }: Props) {
         }}
       >
         <Stack direction="row" alignItems="flex-start" justifyContent="space-between">
-          <Typography variant="h5">{shop.name}</Typography>
+          <Stack spacing={2} direction="row" alignItems="flex-start">
+            <Logo sx={{ width: 60, height: 60 }} />
+            <Stack>
+              <Typography variant="h5">{shop.name}</Typography>
+              <Typography variant="body2" sx={{ mt: 0.5, opacity: 0.8 }}>
+                {shop.address} · สั่งอาหารได้เลย ไม่ต้องเข้าสู่ระบบ
+              </Typography>
+            </Stack>
+          </Stack>
           {!qrTable && (
             <IconButton
               onClick={() => setShowHistory(true)}
@@ -236,6 +307,7 @@ export function OrderView({ items, categories, bestSellers, shop }: Props) {
             </IconButton>
           )}
         </Stack>
+
         {qrTable ? (
           <Stack direction="row" alignItems="center" spacing={1} sx={{ mt: 0.5 }}>
             <Typography variant="body2" sx={{ opacity: 0.8 }}>
@@ -250,9 +322,20 @@ export function OrderView({ items, categories, bestSellers, shop }: Props) {
             </Typography>
           </Stack>
         ) : (
-          <Typography variant="body2" sx={{ mt: 0.5, opacity: 0.8 }}>
-            {shop.address} · สั่งอาหารได้เลย ไม่ต้องเข้าสู่ระบบ
-          </Typography>
+          <Button
+            variant="outlined"
+            size="small"
+            onClick={() => setScannerOpen(true)}
+            startIcon={<Iconify icon={'solar:qr-code-bold' as IconifyName} width={18} />}
+            sx={{
+              mt: 1.5,
+              color: 'common.white',
+              borderColor: 'rgba(255,255,255,0.5)',
+              '&:hover': { borderColor: 'common.white', bgcolor: 'rgba(255,255,255,0.08)' },
+            }}
+          >
+            สแกน QR โต๊ะ
+          </Button>
         )}
 
         {qrTable && (
@@ -277,6 +360,60 @@ export function OrderView({ items, categories, bestSellers, shop }: Props) {
       ) : (
         <>
           <BestSellerStrip items={bestSellers} quantities={quantities} onAdd={handleAdd} />
+
+          {shop.customOrder.enabled && shop.customOrder.steps.length > 0 && (
+            <Box sx={{ px: 2.5 }}>
+              <Stack
+                direction="row"
+                alignItems="center"
+                spacing={1.5}
+                sx={{
+                  p: 2,
+                  borderRadius: 2.5,
+                  color: 'common.white',
+                  background: 'linear-gradient(135deg, #8B1111 0%, #C62828 100%)',
+                  // boxShadow: '0 10px 24px rgba(139, 17, 17, 0.20)',
+                }}
+              >
+                <Box
+                  sx={{
+                    width: 52,
+                    height: 52,
+                    flexShrink: 0,
+                    display: 'grid',
+                    placeItems: 'center',
+                    borderRadius: '50%',
+                    bgcolor: 'rgba(255,255,255,0.14)',
+                    fontSize: 28,
+                  }}
+                >
+                  🍜
+                </Box>
+                <Box sx={{ flex: 1, minWidth: 0 }}>
+                  <Typography variant="h6" sx={{ color: '#FFD54F' }}>
+                    {shop.customOrder.title}
+                  </Typography>
+                  <Typography variant="caption" sx={{ opacity: 0.82 }}>
+                    เลือกเส้น เครื่อง และขนาดได้ตามใจคุณ
+                  </Typography>
+                </Box>
+                <Button
+                  variant="contained"
+                  color="inherit"
+                  onClick={() => setCustomOrderOpen(true)}
+                  endIcon={<Iconify icon="solar:double-alt-arrow-right-bold-duotone" width={18} />}
+                  sx={{
+                    flexShrink: 0,
+                    color: '#7A1010',
+                    bgcolor: 'common.white',
+                    '&:hover': { bgcolor: 'grey.100' },
+                  }}
+                >
+                  เลือกเลย
+                </Button>
+              </Stack>
+            </Box>
+          )}
 
           <Stack
             direction="row"
@@ -365,11 +502,25 @@ export function OrderView({ items, categories, bestSellers, shop }: Props) {
         total={totalPrice}
         submitting={submitting}
         qrMode={!!qrTable}
+        tables={tables}
         onAdd={handleAdd}
         onRemove={handleRemove}
         customer={effectiveCustomer}
         onChangeCustomer={handleChangeCustomer}
         onConfirm={handleConfirm}
+      />
+
+      <QrScannerDialog
+        open={scannerOpen}
+        onClose={() => setScannerOpen(false)}
+        onScan={handleScanTable}
+      />
+
+      <CustomOrderDialog
+        open={customOrderOpen}
+        config={shop.customOrder}
+        onClose={() => setCustomOrderOpen(false)}
+        onAdd={handleAddCustomOrder}
       />
     </Box>
   );

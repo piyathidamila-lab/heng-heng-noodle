@@ -21,7 +21,7 @@ export function BestSellerStrip({ items, quantities, onAdd }: Props) {
   if (items.length === 0) return null;
 
   return (
-    <Box sx={{ pt: 2, pb: 1, borderBottom: '1px solid', borderColor: 'grey.200' }}>
+    <Box sx={{ pt: 2, pb: 1, borderColor: 'grey.200' }}>
       <Stack direction="row" alignItems="center" spacing={0.5} sx={{ px: 2.5, mb: 1.5 }}>
         <Iconify icon={'solar:fire-bold' as IconifyName} width={18} sx={{ color: 'error.main' }} />
         <Typography variant="subtitle2">เมนูขายดี</Typography>

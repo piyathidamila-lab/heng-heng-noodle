@@ -1,4 +1,7 @@
+import type { CustomOrderSelection } from './shop-settings-service';
+
 import { getSupabaseAdmin } from './supabase-admin';
+import { getShopSettings } from './shop-settings-service';
 
 // ----------------------------------------------------------------------
 
@@ -15,7 +18,6 @@ export type OrderRecord = {
   id: string;
   orderNumber: string;
   customerName: string;
-  customerPhone: string;
   orderType: 'dine-in' | 'takeaway';
   tableNumber: string;
   note: string;
@@ -27,11 +29,14 @@ export type OrderRecord = {
 
 export type CreateOrderInput = {
   customerName: string;
-  customerPhone: string;
   orderType: 'dine-in' | 'takeaway';
   tableNumber: string;
   note: string;
-  lines: { menuItemId: string; quantity: number }[];
+  lines: {
+    menuItemId?: string;
+    quantity: number;
+    customization?: CustomOrderSelection;
+  }[];
 };
 
 export class OrderValidationError extends Error {}
@@ -91,8 +96,8 @@ export async function createOrderRecord(input: CreateOrderInput): Promise<OrderR
   if (input.lines.length === 0) {
     throw new OrderValidationError('ตะกร้าว่างเปล่า');
   }
-  if (!input.customerName.trim() || !input.customerPhone.trim()) {
-    throw new OrderValidationError('กรุณากรอกชื่อและเบอร์โทรศัพท์');
+  if (!input.customerName.trim()) {
+    throw new OrderValidationError('กรุณากรอกชื่อผู้สั่ง');
   }
   if (input.orderType === 'dine-in' && !input.tableNumber.trim()) {
     throw new OrderValidationError('กรุณาระบุหมายเลขโต๊ะ');
@@ -100,27 +105,69 @@ export async function createOrderRecord(input: CreateOrderInput): Promise<OrderR
 
   const supabase = getSupabaseAdmin();
 
-  const menuItemIds = input.lines.map((line) => line.menuItemId);
+  const menuItemIds = input.lines
+    .filter((line) => !line.customization && line.menuItemId)
+    .map((line) => line.menuItemId as string);
 
-  const { data: menuItems, error: menuError } = await supabase
-    .from('menu_items')
-    .select('id, name, price, is_available')
-    .in('id', menuItemIds);
+  const { data: menuItems, error: menuError } = menuItemIds.length
+    ? await supabase
+        .from('menu_items')
+        .select('id, name, price, is_available')
+        .in('id', menuItemIds)
+    : { data: [], error: null };
 
   if (menuError) throw menuError;
 
   const menuById = new Map((menuItems ?? []).map((item) => [item.id, item]));
+  const settings = input.lines.some((line) => line.customization) ? await getShopSettings() : null;
 
   const orderItems = input.lines.map((line) => {
+    if (line.quantity <= 0 || !Number.isInteger(line.quantity)) {
+      throw new OrderValidationError('จำนวนรายการไม่ถูกต้อง');
+    }
+
+    if (line.customization) {
+      const config = settings?.customOrder;
+      if (!config?.enabled || config.steps.length === 0) {
+        throw new OrderValidationError('เมนูความอร่อยเลือกเองปิดให้บริการแล้ว กรุณาลองใหม่');
+      }
+
+      const choiceByStep = new Map(
+        line.customization.choices.map((choice) => [choice.stepId, choice.optionId])
+      );
+      if (
+        choiceByStep.size !== config.steps.length ||
+        line.customization.choices.length !== config.steps.length
+      ) {
+        throw new OrderValidationError('กรุณาเลือกตัวเลือกให้ครบทุกขั้นตอน');
+      }
+
+      const selectedOptions = config.steps.map((step) => {
+        const optionId = choiceByStep.get(step.id);
+        const option = step.options.find((item) => item.id === optionId);
+        if (!option) {
+          throw new OrderValidationError('ตัวเลือกมีการเปลี่ยนแปลง กรุณาเลือกใหม่อีกครั้ง');
+        }
+        return option;
+      });
+
+      return {
+        menu_item_id: null,
+        name: `${config.title} (${selectedOptions.map((option) => option.label).join(' · ')})`,
+        price: selectedOptions.reduce((sum, option) => sum + option.price, 0),
+        quantity: line.quantity,
+      };
+    }
+
+    if (!line.menuItemId) {
+      throw new OrderValidationError('รายการอาหารไม่ถูกต้อง');
+    }
+
     const menuItem = menuById.get(line.menuItemId);
 
     if (!menuItem || !menuItem.is_available) {
       throw new OrderValidationError('มีรายการอาหารที่ไม่พร้อมจำหน่ายในตะกร้า กรุณาลองใหม่');
     }
-    if (line.quantity <= 0) {
-      throw new OrderValidationError('จำนวนรายการไม่ถูกต้อง');
-    }
-
     return {
       menu_item_id: menuItem.id,
       name: menuItem.name,
@@ -140,13 +187,12 @@ export async function createOrderRecord(input: CreateOrderInput): Promise<OrderR
     .insert({
       session_id: sessionId,
       customer_name: input.customerName.trim(),
-      customer_phone: input.customerPhone.trim(),
       order_type: input.orderType,
       table_number: tableNumber,
       note: input.note.trim(),
       total,
     })
-    .select('id, seq, customer_name, customer_phone, order_type, table_number, note, status, total, created_at')
+    .select('id, seq, customer_name, order_type, table_number, note, status, total, created_at')
     .single();
 
   if (orderError) throw orderError;
@@ -161,7 +207,6 @@ export async function createOrderRecord(input: CreateOrderInput): Promise<OrderR
     id: order.id,
     orderNumber: formatOrderNumber(order.seq),
     customerName: order.customer_name,
-    customerPhone: order.customer_phone,
     orderType: order.order_type,
     tableNumber: order.table_number,
     note: order.note,
@@ -178,13 +223,12 @@ export async function createOrderRecord(input: CreateOrderInput): Promise<OrderR
 }
 
 const ORDER_SELECT_COLUMNS =
-  'id, seq, customer_name, customer_phone, order_type, table_number, note, status, total, created_at, order_items (id, name, price, quantity)';
+  'id, seq, customer_name, order_type, table_number, note, status, total, created_at, order_items (id, name, price, quantity)';
 
 type OrderRow = {
   id: string;
   seq: number;
   customer_name: string;
-  customer_phone: string;
   order_type: 'dine-in' | 'takeaway';
   table_number: string;
   note: string;
@@ -199,7 +243,6 @@ function mapOrderRow(order: OrderRow): OrderRecord {
     id: order.id,
     orderNumber: formatOrderNumber(order.seq),
     customerName: order.customer_name,
-    customerPhone: order.customer_phone,
     orderType: order.order_type,
     tableNumber: order.table_number,
     note: order.note,
@@ -261,7 +304,6 @@ export type TableOrderSummary = {
  * shared "table view" so everyone who scanned the table's QR code sees
  * this round's orders, not every order the table has ever had. Returns an
  * empty list once the table has been closed (paid) or was never opened.
- * Deliberately omits customer_phone: served to any customer at the table.
  */
 export async function getOrdersByTable(tableNumber: string): Promise<TableOrderSummary[]> {
   const supabase = getSupabaseAdmin();

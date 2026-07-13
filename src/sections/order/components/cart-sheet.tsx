@@ -1,5 +1,7 @@
-import type { MenuItem } from '../menu-data';
 import type { CustomerInfo } from '../view/order-view';
+import type { MenuItem as MenuItemType } from '../menu-data';
+import type { RestaurantTable } from 'src/lib/table-service';
+import type { CustomOrderSelection } from 'src/lib/shop-settings-service';
 
 import Box from '@mui/material/Box';
 import Radio from '@mui/material/Radio';
@@ -7,6 +9,7 @@ import Stack from '@mui/material/Stack';
 import Drawer from '@mui/material/Drawer';
 import Button from '@mui/material/Button';
 import Divider from '@mui/material/Divider';
+import MenuItem from '@mui/material/MenuItem';
 import TextField from '@mui/material/TextField';
 import IconButton from '@mui/material/IconButton';
 import Typography from '@mui/material/Typography';
@@ -17,7 +20,11 @@ import { Iconify } from 'src/components/iconify';
 
 // ----------------------------------------------------------------------
 
-export type CartLine = { item: MenuItem; quantity: number };
+export type CartLine = {
+  item: MenuItemType;
+  quantity: number;
+  customization?: CustomOrderSelection;
+};
 
 type Props = {
   open: boolean;
@@ -26,6 +33,7 @@ type Props = {
   total: number;
   submitting: boolean;
   qrMode: boolean;
+  tables: RestaurantTable[];
   onAdd: (id: string) => void;
   onRemove: (id: string) => void;
   customer: CustomerInfo;
@@ -40,6 +48,7 @@ export function CartSheet({
   total,
   submitting,
   qrMode,
+  tables,
   onAdd,
   onRemove,
   customer,
@@ -49,7 +58,6 @@ export function CartSheet({
   const canConfirm =
     lines.length > 0 &&
     customer.name.trim().length > 0 &&
-    customer.phone.trim().length > 0 &&
     (customer.orderType === 'takeaway' || customer.tableNumber.trim().length > 0);
 
   return (
@@ -88,7 +96,7 @@ export function CartSheet({
           </Typography>
         ) : (
           <Stack spacing={1.5} divider={<Divider flexItem />}>
-            {lines.map(({ item, quantity }) => (
+            {lines.map(({ item, quantity, customization }) => (
               <Stack key={item.id} direction="row" spacing={1.5} alignItems="center">
                 <Box sx={{ fontSize: 24 }}>{item.emoji}</Box>
                 <Box sx={{ flex: 1, minWidth: 0 }}>
@@ -98,6 +106,14 @@ export function CartSheet({
                   <Typography variant="caption" sx={{ color: 'text.secondary' }}>
                     {item.price} บาท
                   </Typography>
+                  {customization && (
+                    <Typography
+                      variant="caption"
+                      sx={{ color: 'text.secondary', display: 'block' }}
+                    >
+                      {item.description}
+                    </Typography>
+                  )}
                 </Box>
                 <Stack direction="row" spacing={0.5} alignItems="center">
                   <IconButton size="small" color="primary" onClick={() => onRemove(item.id)}>
@@ -146,14 +162,6 @@ export function CartSheet({
                 />
               )}
 
-              <TextField
-                label="เบอร์โทรศัพท์"
-                size="small"
-                value={customer.phone}
-                onChange={(e) => onChangeCustomer({ phone: e.target.value })}
-                fullWidth
-              />
-
               {!qrMode && (
                 <RadioGroup
                   row
@@ -169,12 +177,23 @@ export function CartSheet({
 
               {!qrMode && customer.orderType === 'dine-in' && (
                 <TextField
+                  select
                   label="หมายเลขโต๊ะ"
                   size="small"
                   value={customer.tableNumber}
                   onChange={(e) => onChangeCustomer({ tableNumber: e.target.value })}
+                  helperText={
+                    tables.length === 0 ? 'ยังไม่มีข้อมูลโต๊ะ กรุณาติดต่อพนักงาน' : undefined
+                  }
+                  disabled={tables.length === 0}
                   fullWidth
-                />
+                >
+                  {tables.map((table) => (
+                    <MenuItem key={table.id} value={table.label}>
+                      โต๊ะ {table.label}
+                    </MenuItem>
+                  ))}
+                </TextField>
               )}
 
               <TextField

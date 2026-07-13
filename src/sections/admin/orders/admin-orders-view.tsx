@@ -153,9 +153,7 @@ export function AdminOrdersView({ initialOrders, initialSessions }: Props) {
                   {fTime(order.createdAt)} · กลับบ้าน
                 </Typography>
 
-                <Typography variant="body2">
-                  {order.customerName} · {order.customerPhone}
-                </Typography>
+                <Typography variant="body2">{order.customerName}</Typography>
 
                 <Divider />
 

@@ -61,10 +61,6 @@ export function OrderConfirmed({
           <Typography variant="subtitle2">{customer.name}</Typography>
         </Stack>
         <Stack direction="row" justifyContent="space-between">
-          <Typography sx={{ color: 'text.secondary' }}>เบอร์โทร</Typography>
-          <Typography variant="subtitle2">{customer.phone}</Typography>
-        </Stack>
-        <Stack direction="row" justifyContent="space-between">
           <Typography sx={{ color: 'text.secondary' }}>รูปแบบ</Typography>
           <Typography variant="subtitle2">
             {customer.orderType === 'dine-in'
@@ -87,12 +83,19 @@ export function OrderConfirmed({
         divider={<Divider flexItem />}
         sx={{ p: 2, borderRadius: 2, border: '1px solid', borderColor: 'grey.200' }}
       >
-        {lines.map(({ item, quantity }) => (
+        {lines.map(({ item, quantity, customization }) => (
           <Stack key={item.id} direction="row" spacing={1.5} alignItems="center">
             <Box sx={{ fontSize: 22 }}>{item.emoji}</Box>
-            <Typography variant="body2" sx={{ flex: 1 }}>
-              {item.name} × {quantity}
-            </Typography>
+            <Box sx={{ flex: 1 }}>
+              <Typography variant="body2">
+                {item.name} × {quantity}
+              </Typography>
+              {customization && (
+                <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+                  {item.description}
+                </Typography>
+              )}
+            </Box>
             <Typography variant="subtitle2">{item.price * quantity} บาท</Typography>
           </Stack>
         ))}
