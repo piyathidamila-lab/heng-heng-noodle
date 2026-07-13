@@ -31,6 +31,7 @@ export function BestSellerStrip({ items, quantities, onAdd }: Props) {
         direction="row"
         spacing={1.5}
         sx={{
+          pt: 2,
           px: 2.5,
           pb: 0.5,
           overflowX: 'auto',

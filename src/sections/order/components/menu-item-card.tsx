@@ -31,8 +31,8 @@ export function MenuItemCard({ item, quantity, onAdd, onRemove }: Props) {
     >
       <Box
         sx={{
-          width: 56,
-          height: 56,
+          width: 120,
+          height: 120,
           flexShrink: 0,
           borderRadius: 1.5,
           display: 'grid',
@@ -71,13 +71,14 @@ export function MenuItemCard({ item, quantity, onAdd, onRemove }: Props) {
       {quantity === 0 ? (
         <IconButton
           onClick={() => onAdd(item.id)}
+          size="small"
           sx={{
             color: 'common.white',
             bgcolor: 'primary.main',
             '&:hover': { bgcolor: 'primary.dark' },
           }}
         >
-          <Iconify icon="mingcute:add-line" width={20} />
+          <Iconify icon="mingcute:add-line" width={18} />
         </IconButton>
       ) : (
         <Stack direction="row" spacing={0.5} alignItems="center" sx={{ flexShrink: 0 }}>

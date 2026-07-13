@@ -33,10 +33,10 @@ import { OrderConfirmed } from '../components/order-confirmed';
 import { QrScannerDialog } from '../components/qr-scanner-dialog';
 import { BestSellerStrip } from '../components/best-seller-strip';
 import { TableOrdersPanel } from '../components/table-orders-panel';
+import { saveTableName, getSavedTableName } from '../table-session';
 import { CustomOrderDialog } from '../components/custom-order-dialog';
 import { OrderHistoryPanel } from '../components/order-history-panel';
 import { getOrderHistory, addOrderToHistory } from '../order-history';
-import { saveTableName, clearTableName, getSavedTableName } from '../table-session';
 
 // ----------------------------------------------------------------------
 
@@ -175,12 +175,6 @@ export function OrderView({ items, categories, bestSellers, tables, shop }: Prop
     setTableName(name);
   };
 
-  const handleChangeName = () => {
-    if (!qrTable) return;
-    clearTableName(qrTable);
-    setTableName(null);
-  };
-
   const handleScanTable = (label: string) => {
     setScannerOpen(false);
     router.push(`/?table=${encodeURIComponent(label)}`);
@@ -295,8 +289,16 @@ export function OrderView({ items, categories, bestSellers, tables, shop }: Prop
               <Typography variant="body2" sx={{ mt: 0.5, opacity: 0.8 }}>
                 {shop.address} · สั่งอาหารได้เลย ไม่ต้องเข้าสู่ระบบ
               </Typography>
+              {qrTable && (
+                <Stack direction="row" alignItems="center" spacing={1} sx={{ mt: 0.5 }}>
+                  <Typography variant="body2" sx={{ opacity: 0.8 }}>
+                    โต๊ะ {qrTable} · สวัสดีคุณ {tableName}
+                  </Typography>
+                </Stack>
+              )}
             </Stack>
           </Stack>
+
           {!qrTable && (
             <IconButton
               onClick={() => setShowHistory(true)}
@@ -308,20 +310,7 @@ export function OrderView({ items, categories, bestSellers, tables, shop }: Prop
           )}
         </Stack>
 
-        {qrTable ? (
-          <Stack direction="row" alignItems="center" spacing={1} sx={{ mt: 0.5 }}>
-            <Typography variant="body2" sx={{ opacity: 0.8 }}>
-              โต๊ะ {qrTable} · สวัสดีคุณ {tableName}
-            </Typography>
-            <Typography
-              variant="caption"
-              onClick={handleChangeName}
-              sx={{ opacity: 0.7, textDecoration: 'underline', cursor: 'pointer' }}
-            >
-              เปลี่ยนชื่อ
-            </Typography>
-          </Stack>
-        ) : (
+        {!qrTable && (
           <Button
             variant="outlined"
             size="small"
