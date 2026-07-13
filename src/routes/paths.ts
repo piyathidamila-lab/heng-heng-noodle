@@ -17,9 +17,6 @@ const ROOTS = {
 
 export const paths = {
   comingSoon: '/coming-soon',
-  maintenance: '/maintenance',
-  pricing: '/pricing',
-  payment: '/payment',
   about: '/about-us',
   contact: '/contact-us',
   faqs: '/faqs',
@@ -28,22 +25,7 @@ export const paths = {
   page500: '/error/500',
   components: '/components',
   docs: 'https://docs.minimals.cc/',
-  changelog: 'https://docs.minimals.cc/changelog/',
-  zoneStore: 'https://mui.com/store/items/zone-landing-page/',
   minimalStore: 'https://mui.com/store/items/minimal-dashboard/',
-  freeUI: 'https://mui.com/store/items/minimal-dashboard-free/',
-  figmaUrl: 'https://www.figma.com/design/WadcoP3CSejUDj7YZc87xj/%5BPreview%5D-Minimal-Web.v7.3.0',
-  product: {
-    root: `/product`,
-    checkout: `/product/checkout`,
-    details: (id: string) => `/product/${id}`,
-    demo: { details: `/product/${MOCK_ID}` },
-  },
-  post: {
-    root: `/post`,
-    details: (title: string) => `/post/${kebabCase(title)}`,
-    demo: { details: `/post/${kebabCase(MOCK_TITLE)}` },
-  },
   // AUTH
   auth: {
     amplify: {

@@ -12,6 +12,7 @@ import Tabs from '@mui/material/Tabs';
 import Stack from '@mui/material/Stack';
 import Badge from '@mui/material/Badge';
 import Button from '@mui/material/Button';
+import IconButton from '@mui/material/IconButton';
 import Typography from '@mui/material/Typography';
 
 import { useSearchParams } from 'src/routes/hooks';
@@ -26,6 +27,8 @@ import { MenuItemCard } from '../components/menu-item-card';
 import { TableNameGate } from '../components/table-name-gate';
 import { OrderConfirmed } from '../components/order-confirmed';
 import { TableOrdersPanel } from '../components/table-orders-panel';
+import { OrderHistoryPanel } from '../components/order-history-panel';
+import { getOrderHistory, addOrderToHistory } from '../order-history';
 import { saveTableName, clearTableName, getSavedTableName } from '../table-session';
 
 // ----------------------------------------------------------------------
@@ -65,6 +68,7 @@ export function OrderView({ items }: Props) {
   const [tableName, setTableName] = useState<string | null>(null);
   const [nameChecked, setNameChecked] = useState(false);
   const [view, setView] = useState<'menu' | 'orders'>('menu');
+  const [showHistory, setShowHistory] = useState(false);
 
   const [activeCategory, setActiveCategory] = useState(MENU_CATEGORIES[0].value);
   const [quantities, setQuantities] = useState<Record<string, number>>({});
@@ -147,6 +151,20 @@ export function OrderView({ items }: Props) {
         toast.success(`สั่งอาหารสำเร็จ! ออเดอร์ ${result.order.orderNumber}`);
         setView('orders');
       } else {
+        addOrderToHistory({
+          orderNumber: result.order.orderNumber,
+          orderTime: result.order.createdAt,
+          orderType: result.order.orderType,
+          tableNumber: result.order.tableNumber,
+          total: result.order.total,
+          items: cartLines.map((line) => ({
+            name: line.item.name,
+            emoji: line.item.emoji,
+            price: line.item.price,
+            quantity: line.quantity,
+          })),
+        });
+
         setConfirmedOrder({
           orderNumber: result.order.orderNumber,
           orderTime: new Date(result.order.createdAt),
@@ -188,6 +206,10 @@ export function OrderView({ items }: Props) {
     );
   }
 
+  if (showHistory) {
+    return <OrderHistoryPanel orders={getOrderHistory()} onBack={() => setShowHistory(false)} />;
+  }
+
   return (
     <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', pb: totalQuantity ? 11 : 3 }}>
       <Box
@@ -198,7 +220,18 @@ export function OrderView({ items }: Props) {
           bgcolor: 'primary.main',
         }}
       >
-        <Typography variant="h5">เฮงเฮง ก๋วยเตี๋ยว</Typography>
+        <Stack direction="row" alignItems="flex-start" justifyContent="space-between">
+          <Typography variant="h5">เฮงเฮง ก๋วยเตี๋ยว</Typography>
+          {!qrTable && (
+            <IconButton
+              onClick={() => setShowHistory(true)}
+              sx={{ color: 'common.white', mt: -0.5, mr: -1 }}
+              aria-label="ประวัติการสั่งซื้อ"
+            >
+              <Iconify icon="solar:notebook-bold-duotone" width={22} />
+            </IconButton>
+          )}
+        </Stack>
         {qrTable ? (
           <Stack direction="row" alignItems="center" spacing={1} sx={{ mt: 0.5 }}>
             <Typography variant="body2" sx={{ opacity: 0.8 }}>
@@ -236,7 +269,7 @@ export function OrderView({ items }: Props) {
       </Box>
 
       {view === 'orders' && qrTable ? (
-        <TableOrdersPanel table={qrTable} />
+        <TableOrdersPanel table={qrTable} currentName={tableName ?? ''} />
       ) : (
         <>
           <Stack

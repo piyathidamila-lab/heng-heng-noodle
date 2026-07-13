@@ -1,6 +1,6 @@
 'use client';
 
-import type { OrderStatus, OrderRecord } from 'src/lib/order-service';
+import type { OrderRecord, TableSessionSummary } from 'src/lib/order-service';
 
 import { useMemo, useState, useEffect } from 'react';
 
@@ -13,33 +13,13 @@ import Typography from '@mui/material/Typography';
 
 import { fTime } from 'src/utils/format-time';
 
+import { OpenTablesPanel } from './open-tables-panel';
 import { listOrdersAdmin, updateOrderStatus } from './order-admin-actions';
+import { NEXT_STATUS, STATUS_COLOR, STATUS_LABEL } from './order-status-config';
 
 // ----------------------------------------------------------------------
 
 const POLL_INTERVAL_MS = 5000;
-
-const STATUS_LABEL: Record<OrderStatus, string> = {
-  pending: 'รอดำเนินการ',
-  preparing: 'กำลังทำ',
-  served: 'เสิร์ฟแล้ว',
-  completed: 'เสร็จสิ้น',
-  cancelled: 'ยกเลิก',
-};
-
-const STATUS_COLOR: Record<OrderStatus, 'warning' | 'info' | 'success' | 'default' | 'error'> = {
-  pending: 'warning',
-  preparing: 'info',
-  served: 'success',
-  completed: 'default',
-  cancelled: 'error',
-};
-
-const NEXT_STATUS: Partial<Record<OrderStatus, { status: OrderStatus; label: string }>> = {
-  pending: { status: 'preparing', label: 'เริ่มทำอาหาร' },
-  preparing: { status: 'served', label: 'เสิร์ฟแล้ว' },
-  served: { status: 'completed', label: 'จบออเดอร์' },
-};
 
 const FILTERS: { value: 'active' | 'all'; label: string }[] = [
   { value: 'active', label: 'กำลังดำเนินการ' },
@@ -48,9 +28,10 @@ const FILTERS: { value: 'active' | 'all'; label: string }[] = [
 
 type Props = {
   initialOrders: OrderRecord[];
+  initialSessions: TableSessionSummary[];
 };
 
-export function AdminOrdersView({ initialOrders }: Props) {
+export function AdminOrdersView({ initialOrders, initialSessions }: Props) {
   const [orders, setOrders] = useState(initialOrders);
   const [filter, setFilter] = useState<'active' | 'all'>('active');
 
@@ -73,12 +54,16 @@ export function AdminOrdersView({ initialOrders }: Props) {
     };
   }, []);
 
+  const takeawayOrders = useMemo(() => orders.filter((order) => order.orderType === 'takeaway'), [
+    orders,
+  ]);
+
   const visibleOrders = useMemo(
     () =>
       filter === 'active'
-        ? orders.filter((order) => order.status !== 'completed' && order.status !== 'cancelled')
-        : orders,
-    [orders, filter]
+        ? takeawayOrders.filter((order) => order.status !== 'completed' && order.status !== 'cancelled')
+        : takeawayOrders,
+    [takeawayOrders, filter]
   );
 
   const handleAdvance = async (order: OrderRecord) => {
@@ -100,8 +85,16 @@ export function AdminOrdersView({ initialOrders }: Props) {
 
   return (
     <Box>
+      <Typography variant="h4" sx={{ mb: 3 }}>
+        ออเดอร์
+      </Typography>
+
+      <OpenTablesPanel initialSessions={initialSessions} />
+
+      <Divider sx={{ mb: 4 }} />
+
       <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 3 }}>
-        <Typography variant="h4">ออเดอร์</Typography>
+        <Typography variant="h5">ออเดอร์กลับบ้าน</Typography>
 
         <Stack direction="row" spacing={1}>
           {FILTERS.map((item) => (
@@ -118,7 +111,7 @@ export function AdminOrdersView({ initialOrders }: Props) {
 
       {visibleOrders.length === 0 ? (
         <Typography sx={{ color: 'text.secondary', textAlign: 'center', py: 8 }}>
-          ยังไม่มีออเดอร์
+          ยังไม่มีออเดอร์กลับบ้าน
         </Typography>
       ) : (
         <Box
@@ -157,10 +150,7 @@ export function AdminOrdersView({ initialOrders }: Props) {
                 </Stack>
 
                 <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-                  {fTime(order.createdAt)} ·{' '}
-                  {order.orderType === 'dine-in'
-                    ? `ทานที่ร้าน (โต๊ะ ${order.tableNumber})`
-                    : 'กลับบ้าน'}
+                  {fTime(order.createdAt)} · กลับบ้าน
                 </Typography>
 
                 <Typography variant="body2">

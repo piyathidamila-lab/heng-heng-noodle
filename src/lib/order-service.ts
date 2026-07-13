@@ -41,6 +41,48 @@ function formatOrderNumber(seq: number): string {
 }
 
 /**
+ * Finds the currently open session for a table, or opens a new one. A
+ * table only has at most one open session at a time (enforced by a
+ * partial unique index) — this is what lets the QR table view show just
+ * the current diners' orders instead of every order ever placed there.
+ */
+async function getOrCreateOpenSession(tableNumber: string): Promise<string> {
+  const supabase = getSupabaseAdmin();
+
+  const { data: existing, error: selectError } = await supabase
+    .from('table_sessions')
+    .select('id')
+    .eq('table_number', tableNumber)
+    .eq('status', 'open')
+    .maybeSingle();
+
+  if (selectError) throw selectError;
+  if (existing) return existing.id;
+
+  const { data: created, error: insertError } = await supabase
+    .from('table_sessions')
+    .insert({ table_number: tableNumber })
+    .select('id')
+    .single();
+
+  if (!insertError) return created.id;
+
+  // Another request opened the session concurrently — the unique index
+  // rejected our insert, so fall back to reading the one that won.
+  const { data: retry, error: retryError } = await supabase
+    .from('table_sessions')
+    .select('id')
+    .eq('table_number', tableNumber)
+    .eq('status', 'open')
+    .maybeSingle();
+
+  if (retryError) throw retryError;
+  if (retry) return retry.id;
+
+  throw insertError;
+}
+
+/**
  * Creates an order after re-pricing every line from the current menu_items
  * table — the client only ever sends menu item ids + quantities, so a
  * tampered "price" in the request body can't change what gets charged.
@@ -89,13 +131,18 @@ export async function createOrderRecord(input: CreateOrderInput): Promise<OrderR
 
   const total = orderItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
 
+  const tableNumber = input.orderType === 'dine-in' ? input.tableNumber.trim() : '';
+  const sessionId =
+    input.orderType === 'dine-in' ? await getOrCreateOpenSession(tableNumber) : null;
+
   const { data: order, error: orderError } = await supabase
     .from('orders')
     .insert({
+      session_id: sessionId,
       customer_name: input.customerName.trim(),
       customer_phone: input.customerPhone.trim(),
       order_type: input.orderType,
-      table_number: input.orderType === 'dine-in' ? input.tableNumber.trim() : '',
+      table_number: tableNumber,
       note: input.note.trim(),
       total,
     })
@@ -130,21 +177,25 @@ export async function createOrderRecord(input: CreateOrderInput): Promise<OrderR
   };
 }
 
-/** All orders for the admin dashboard, newest first. */
-export async function getOrders(): Promise<OrderRecord[]> {
-  const supabase = getSupabaseAdmin();
+const ORDER_SELECT_COLUMNS =
+  'id, seq, customer_name, customer_phone, order_type, table_number, note, status, total, created_at, order_items (id, name, price, quantity)';
 
-  const { data, error } = await supabase
-    .from('orders')
-    .select(
-      'id, seq, customer_name, customer_phone, order_type, table_number, note, status, total, created_at, order_items (id, name, price, quantity)'
-    )
-    .order('created_at', { ascending: false })
-    .limit(100);
+type OrderRow = {
+  id: string;
+  seq: number;
+  customer_name: string;
+  customer_phone: string;
+  order_type: 'dine-in' | 'takeaway';
+  table_number: string;
+  note: string;
+  status: OrderStatus;
+  total: number;
+  created_at: string;
+  order_items: { id: string; name: string; price: number; quantity: number }[] | null;
+};
 
-  if (error) throw error;
-
-  return (data ?? []).map((order) => ({
+function mapOrderRow(order: OrderRow): OrderRecord {
+  return {
     id: order.id,
     orderNumber: formatOrderNumber(order.seq),
     customerName: order.customer_name,
@@ -155,13 +206,44 @@ export async function getOrders(): Promise<OrderRecord[]> {
     status: order.status,
     total: Number(order.total),
     createdAt: order.created_at,
-    items: (order.order_items ?? []).map((item: OrderItemRecord) => ({
+    items: (order.order_items ?? []).map((item) => ({
       id: item.id,
       name: item.name,
       price: Number(item.price),
       quantity: item.quantity,
     })),
-  }));
+  };
+}
+
+/** All orders for the admin dashboard, newest first. */
+export async function getOrders(): Promise<OrderRecord[]> {
+  const supabase = getSupabaseAdmin();
+
+  const { data, error } = await supabase
+    .from('orders')
+    .select(ORDER_SELECT_COLUMNS)
+    .order('created_at', { ascending: false })
+    .limit(100);
+
+  if (error) throw error;
+
+  return (data ?? []).map(mapOrderRow);
+}
+
+/** Every order (with customer phone) placed within one table session — the admin's bill view. */
+export async function getOrdersBySession(sessionId: string): Promise<OrderRecord[]> {
+  const supabase = getSupabaseAdmin();
+
+  const { data, error } = await supabase
+    .from('orders')
+    .select(ORDER_SELECT_COLUMNS)
+    .eq('session_id', sessionId)
+    .neq('status', 'cancelled')
+    .order('created_at', { ascending: true });
+
+  if (error) throw error;
+
+  return (data ?? []).map(mapOrderRow);
 }
 
 export type TableOrderSummary = {
@@ -175,21 +257,31 @@ export type TableOrderSummary = {
 };
 
 /**
- * Orders for a single dine-in table, newest first — used by the shared
- * "table view" so everyone who scanned the table's QR code can see what
- * the whole table has ordered so far. Deliberately omits customer_phone:
- * this is served to any customer at the table, not just the admin.
+ * Orders for a table's *current* session only, newest first — used by the
+ * shared "table view" so everyone who scanned the table's QR code sees
+ * this round's orders, not every order the table has ever had. Returns an
+ * empty list once the table has been closed (paid) or was never opened.
+ * Deliberately omits customer_phone: served to any customer at the table.
  */
 export async function getOrdersByTable(tableNumber: string): Promise<TableOrderSummary[]> {
   const supabase = getSupabaseAdmin();
+
+  const { data: session, error: sessionError } = await supabase
+    .from('table_sessions')
+    .select('id')
+    .eq('table_number', tableNumber)
+    .eq('status', 'open')
+    .maybeSingle();
+
+  if (sessionError) throw sessionError;
+  if (!session) return [];
 
   const { data, error } = await supabase
     .from('orders')
     .select(
       'id, seq, customer_name, status, total, created_at, order_items (id, name, price, quantity)'
     )
-    .eq('order_type', 'dine-in')
-    .eq('table_number', tableNumber)
+    .eq('session_id', session.id)
     .neq('status', 'cancelled')
     .order('created_at', { ascending: false })
     .limit(100);
@@ -216,6 +308,60 @@ export async function updateOrderStatusRecord(id: string, status: OrderStatus): 
   const supabase = getSupabaseAdmin();
 
   const { error } = await supabase.from('orders').update({ status }).eq('id', id);
+
+  if (error) throw error;
+}
+
+export type TableSessionSummary = {
+  id: string;
+  tableNumber: string;
+  openedAt: string;
+  orderCount: number;
+  total: number;
+  statusCounts: Partial<Record<OrderStatus, number>>;
+};
+
+/** Tables currently occupied (an open session), for the admin tables view. */
+export async function getOpenTableSessions(): Promise<TableSessionSummary[]> {
+  const supabase = getSupabaseAdmin();
+
+  const { data, error } = await supabase
+    .from('table_sessions')
+    .select('id, table_number, opened_at, orders (total, status)')
+    .eq('status', 'open')
+    .order('opened_at', { ascending: true });
+
+  if (error) throw error;
+
+  return (data ?? []).map((session) => {
+    const orders = (session.orders ?? []) as { total: number; status: OrderStatus }[];
+    const activeOrders = orders.filter((order) => order.status !== 'cancelled');
+
+    const statusCounts: Partial<Record<OrderStatus, number>> = {};
+    activeOrders.forEach((order) => {
+      statusCounts[order.status] = (statusCounts[order.status] ?? 0) + 1;
+    });
+
+    return {
+      id: session.id,
+      tableNumber: session.table_number,
+      openedAt: session.opened_at,
+      orderCount: activeOrders.length,
+      total: activeOrders.reduce((sum, order) => sum + Number(order.total), 0),
+      statusCounts,
+    };
+  });
+}
+
+/** Marks a table's bill as paid and frees it up for the next diners. */
+export async function closeTableSessionRecord(id: string): Promise<void> {
+  const supabase = getSupabaseAdmin();
+
+  const { error } = await supabase
+    .from('table_sessions')
+    .update({ status: 'closed', closed_at: new Date().toISOString() })
+    .eq('id', id)
+    .eq('status', 'open');
 
   if (error) throw error;
 }

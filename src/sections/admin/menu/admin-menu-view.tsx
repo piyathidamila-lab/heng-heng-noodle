@@ -6,7 +6,9 @@ import type { MenuItem } from 'src/sections/order/menu-data';
 import { useState } from 'react';
 
 import Box from '@mui/material/Box';
+import Tab from '@mui/material/Tab';
 import Chip from '@mui/material/Chip';
+import Tabs from '@mui/material/Tabs';
 import Stack from '@mui/material/Stack';
 import Switch from '@mui/material/Switch';
 import Button from '@mui/material/Button';
@@ -32,6 +34,7 @@ export function AdminMenuView({ initialItems }: Props) {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<MenuItem | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [activeCategory, setActiveCategory] = useState(MENU_CATEGORIES[0].value);
 
   const openCreate = () => {
     setEditing(null);
@@ -97,126 +100,131 @@ export function AdminMenuView({ initialItems }: Props) {
         </Button>
       </Stack>
 
-      <Stack spacing={5}>
+      <Tabs
+        value={activeCategory}
+        onChange={(_, value) => setActiveCategory(value)}
+        sx={{ mb: 3, borderBottom: '1px solid', borderColor: 'divider' }}
+      >
         {MENU_CATEGORIES.map((category) => {
-          const categoryItems = items.filter((item) => item.category === category.value);
-          if (categoryItems.length === 0) return null;
-
+          const count = items.filter((item) => item.category === category.value).length;
           return (
-            <Box key={category.value}>
-              <Stack
-                direction="row"
-                alignItems="center"
-                spacing={1.5}
-                sx={{
-                  mb: 2.5,
-                  pl: 1.5,
-                  borderLeft: '4px solid',
-                  borderColor: 'primary.main',
-                }}
-              >
-                <Typography variant="h5">{category.label}</Typography>
-                <Chip label={`${categoryItems.length} รายการ`} size="small" />
-              </Stack>
-
-              <Box
-                sx={{
-                  display: 'grid',
-                  gap: 2.5,
-                  gridTemplateColumns: {
-                    xs: '1fr',
-                    md: 'repeat(2, minmax(0, 1fr))',
-                  },
-                }}
-              >
-                {categoryItems.map((item) => (
-                  <Stack
-                    key={item.id}
-                    spacing={1.75}
-                    sx={{
-                      p: 2.75,
-                      borderRadius: 2.5,
-                      bgcolor: 'common.white',
-                      border: '1px solid',
-                      borderColor: 'grey.200',
-                      opacity: item.isAvailable ? 1 : 0.6,
-                    }}
-                  >
-                    <Stack direction="row" spacing={2} alignItems="flex-start">
-                      <Box
-                        sx={{
-                          width: 64,
-                          height: 64,
-                          flexShrink: 0,
-                          borderRadius: 2,
-                          display: 'grid',
-                          placeItems: 'center',
-                          fontSize: 34,
-                          bgcolor: 'grey.100',
-                          backgroundImage: item.imageUrl ? `url(${item.imageUrl})` : undefined,
-                          backgroundSize: 'cover',
-                          backgroundPosition: 'center',
-                        }}
-                      >
-                        {!item.imageUrl && item.emoji}
-                      </Box>
-
-                      <Box sx={{ flex: 1, minWidth: 0 }}>
-                        <Stack direction="row" alignItems="center" spacing={1}>
-                          <Typography variant="subtitle1" sx={{ fontWeight: 700 }} noWrap>
-                            {item.name}
-                          </Typography>
-                          {!item.isAvailable && <Chip label="ปิดขาย" size="small" />}
-                        </Stack>
-                        <Typography variant="h6" color="primary.main" sx={{ mt: 0.25 }}>
-                          {item.price} บาท
-                        </Typography>
-                      </Box>
-                    </Stack>
-
-                    <Typography
-                      variant="body2"
-                      sx={{
-                        color: 'text.secondary',
-                        display: '-webkit-box',
-                        WebkitBoxOrient: 'vertical',
-                        WebkitLineClamp: 2,
-                        overflow: 'hidden',
-                        minHeight: '2.6em',
-                      }}
-                    >
-                      {item.description}
-                    </Typography>
-
-                    <Divider />
-
-                    <Stack direction="row" alignItems="center" justifyContent="space-between">
-                      <Stack direction="row" alignItems="center" spacing={1}>
-                        <Switch
-                          checked={item.isAvailable}
-                          onChange={() => handleToggleAvailable(item)}
-                        />
-                        <Typography variant="body2">
-                          {item.isAvailable ? 'พร้อมขาย' : 'ปิดขาย'}
-                        </Typography>
-                      </Stack>
-
-                      <Stack direction="row" spacing={0.5}>
-                        <IconButton size="medium" onClick={() => openEdit(item)}>
-                          <Iconify icon="solar:notes-bold-duotone" width={22} />
-                        </IconButton>
-                        <IconButton size="medium" color="error" onClick={() => handleDelete(item)}>
-                          <Iconify icon="solar:trash-bin-trash-bold" width={22} />
-                        </IconButton>
-                      </Stack>
-                    </Stack>
-                  </Stack>
-                ))}
-              </Box>
-            </Box>
+            <Tab
+              key={category.value}
+              value={category.value}
+              label={`${category.label} (${count})`}
+            />
           );
         })}
-      </Stack>
+      </Tabs>
+
+      {(() => {
+        const categoryItems = items.filter((item) => item.category === activeCategory);
+
+        if (categoryItems.length === 0) {
+          return (
+            <Typography sx={{ color: 'text.secondary', textAlign: 'center', py: 8 }}>
+              ยังไม่มีเมนูในหมวดนี้
+            </Typography>
+          );
+        }
+
+        return (
+          <Box
+            sx={{
+              display: 'grid',
+              gap: 2.5,
+              gridTemplateColumns: {
+                xs: '1fr',
+                md: 'repeat(3, minmax(0, 1fr))',
+              },
+            }}
+          >
+            {categoryItems.map((item) => (
+              <Stack
+                key={item.id}
+                spacing={1.75}
+                sx={{
+                  p: 2.75,
+                  borderRadius: 2.5,
+                  bgcolor: 'common.white',
+                  border: '1px solid',
+                  borderColor: 'grey.200',
+                  opacity: item.isAvailable ? 1 : 0.6,
+                }}
+              >
+                <Stack direction="row" spacing={2} alignItems="flex-start">
+                  <Box
+                    sx={{
+                      width: 64,
+                      height: 64,
+                      flexShrink: 0,
+                      borderRadius: 2,
+                      display: 'grid',
+                      placeItems: 'center',
+                      fontSize: 34,
+                      bgcolor: 'grey.100',
+                      backgroundImage: item.imageUrl ? `url(${item.imageUrl})` : undefined,
+                      backgroundSize: 'cover',
+                      backgroundPosition: 'center',
+                    }}
+                  >
+                    {!item.imageUrl && item.emoji}
+                  </Box>
+
+                  <Box sx={{ flex: 1, minWidth: 0 }}>
+                    <Stack direction="row" alignItems="center" spacing={1}>
+                      <Typography variant="subtitle1" sx={{ fontWeight: 700 }} noWrap>
+                        {item.name}
+                      </Typography>
+                      {!item.isAvailable && <Chip label="ปิดขาย" size="small" />}
+                    </Stack>
+                    <Typography variant="h6" color="primary.main" sx={{ mt: 0.25 }}>
+                      {item.price} บาท
+                    </Typography>
+                  </Box>
+                </Stack>
+
+                <Typography
+                  variant="body2"
+                  sx={{
+                    color: 'text.secondary',
+                    display: '-webkit-box',
+                    WebkitBoxOrient: 'vertical',
+                    WebkitLineClamp: 2,
+                    overflow: 'hidden',
+                    minHeight: '2.6em',
+                  }}
+                >
+                  {item.description}
+                </Typography>
+
+                <Divider />
+
+                <Stack direction="row" alignItems="center" justifyContent="space-between">
+                  <Stack direction="row" alignItems="center" spacing={1}>
+                    <Switch
+                      checked={item.isAvailable}
+                      onChange={() => handleToggleAvailable(item)}
+                    />
+                    <Typography variant="body2">
+                      {item.isAvailable ? 'พร้อมขาย' : 'ปิดขาย'}
+                    </Typography>
+                  </Stack>
+
+                  <Stack direction="row" spacing={0.5}>
+                    <IconButton size="medium" onClick={() => openEdit(item)}>
+                      <Iconify icon="solar:notes-bold-duotone" width={22} />
+                    </IconButton>
+                    <IconButton size="medium" color="error" onClick={() => handleDelete(item)}>
+                      <Iconify icon="solar:trash-bin-trash-bold" width={22} />
+                    </IconButton>
+                  </Stack>
+                </Stack>
+              </Stack>
+            ))}
+          </Box>
+        );
+      })()}
 
       <MenuItemFormDialog
         open={dialogOpen}

@@ -38,12 +38,38 @@ create policy "menu_items are publicly readable"
 -- gated by the admin password check, so RLS denies writes from the browser entirely.
 
 -- ----------------------------------------------------------------------
+-- table_sessions — one "open table" run from the first order until the
+-- bill is paid and the admin closes it. Lets the QR table view show only
+-- the current diners' orders instead of every order ever placed at that
+-- table number, and lets the admin see which tables are occupied.
+-- ----------------------------------------------------------------------
+
+create table if not exists public.table_sessions (
+  id uuid primary key default gen_random_uuid(),
+  table_number text not null,
+  status text not null default 'open' check (status in ('open', 'closed')),
+  opened_at timestamptz not null default now(),
+  closed_at timestamptz
+);
+
+-- Only one open session per table at a time.
+create unique index if not exists table_sessions_one_open_per_table
+  on public.table_sessions (table_number)
+  where (status = 'open');
+
+alter table public.table_sessions enable row level security;
+-- No policies for anon/authenticated: sessions are only ever opened/closed
+-- from the server (service-role key) — opened implicitly when an order is
+-- placed, closed by the admin once the table has paid.
+
+-- ----------------------------------------------------------------------
 -- orders
 -- ----------------------------------------------------------------------
 
 create table if not exists public.orders (
   id uuid primary key default gen_random_uuid(),
   seq bigserial not null,
+  session_id uuid references public.table_sessions (id) on delete set null,
   customer_name text not null,
   customer_phone text not null,
   order_type text not null check (order_type in ('dine-in', 'takeaway')),
@@ -55,11 +81,16 @@ create table if not exists public.orders (
   created_at timestamptz not null default now()
 );
 
+-- re-running on a database created before table sessions were added
+alter table public.orders add column if not exists session_id uuid references public.table_sessions (id) on delete set null;
+
 alter table public.orders enable row level security;
 -- No policies for anon/authenticated: orders contain customer PII (name, phone) and
 -- are only ever read/written from the server via the service-role key — placing an
 -- order goes through a server action that recomputes the total from menu_items,
 -- and the admin dashboard reads orders through a cookie-gated server action.
+
+create index if not exists orders_session_id_idx on public.orders (session_id);
 
 -- ----------------------------------------------------------------------
 -- order_items

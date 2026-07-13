@@ -12,7 +12,7 @@ export const metadata: Metadata = { title: 'เข้าสู่ระบบแ
 
 export default async function Page() {
   if (await isAdminAuthenticated()) {
-    redirect('/admin/menu');
+    redirect('/admin/overview');
   }
 
   return <AdminLoginView />;

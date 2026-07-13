@@ -16,6 +16,6 @@ export async function adminLoginAction(_prev: LoginState, formData: FormData): P
   }
 
   await createAdminSession();
-  redirect('/admin/menu');
+  redirect('/admin/overview');
   return {};
 }
