@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 
 import { getOrders, getOpenTableSessions } from 'src/lib/order-service';
 
-import { AdminOrdersView } from 'src/sections/admin/orders/admin-orders-view';
+import { StaffOrdersView } from 'src/sections/staff/orders/staff-orders-view';
 
 // ----------------------------------------------------------------------
 
@@ -11,5 +11,5 @@ export const metadata: Metadata = { title: 'ออเดอร์ | เฮงเ
 export default async function Page() {
   const [orders, sessions] = await Promise.all([getOrders(), getOpenTableSessions()]);
 
-  return <AdminOrdersView initialOrders={orders} initialSessions={sessions} />;
+  return <StaffOrdersView initialOrders={orders} initialSessions={sessions} />;
 }

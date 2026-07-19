@@ -1,6 +1,7 @@
 import type { CustomerInfo } from '../view/order-view';
+import type { IconifyName } from 'src/components/iconify';
+import type { SessionMember } from 'src/lib/member-session';
 import type { MenuItem as MenuItemType } from '../menu-data';
-import type { RestaurantTable } from 'src/lib/table-service';
 import type { CustomOrderSelection } from 'src/lib/shop-settings-service';
 
 import Box from '@mui/material/Box';
@@ -8,9 +9,7 @@ import Chip from '@mui/material/Chip';
 import Stack from '@mui/material/Stack';
 import Drawer from '@mui/material/Drawer';
 import Button from '@mui/material/Button';
-import MenuItem from '@mui/material/MenuItem';
 import TextField from '@mui/material/TextField';
-import ButtonBase from '@mui/material/ButtonBase';
 import IconButton from '@mui/material/IconButton';
 import Typography from '@mui/material/Typography';
 
@@ -31,12 +30,13 @@ type Props = {
   total: number;
   submitting: boolean;
   qrMode: boolean;
-  tables: RestaurantTable[];
+  member: SessionMember | null;
   shopOpen: boolean;
   onAdd: (id: string) => void;
   onRemove: (id: string) => void;
   customer: CustomerInfo;
   onChangeCustomer: (patch: Partial<CustomerInfo>) => void;
+  onScanTable: () => void;
   onConfirm: () => void;
 };
 
@@ -47,12 +47,13 @@ export function CartSheet({
   total,
   submitting,
   qrMode,
-  tables,
+  member,
   shopOpen,
   onAdd,
   onRemove,
   customer,
   onChangeCustomer,
+  onScanTable,
   onConfirm,
 }: Props) {
   const canConfirm =
@@ -363,6 +364,24 @@ export function CartSheet({
                     สั่งโดย <strong>{customer.name}</strong> · โต๊ะ {customer.tableNumber}
                   </Typography>
                 </Stack>
+              ) : member ? (
+                <Stack
+                  direction="row"
+                  alignItems="center"
+                  spacing={1}
+                  sx={{
+                    p: 1.5,
+                    borderRadius: 2,
+                    color: '#087A4B',
+                    bgcolor: '#E5F8ED',
+                    border: '1px solid #B5E2C8',
+                  }}
+                >
+                  <Iconify icon="solar:check-circle-bold" width={20} />
+                  <Typography variant="body2">
+                    สั่งโดย <strong>{member.displayName}</strong>
+                  </Typography>
+                </Stack>
               ) : (
                 <TextField
                   label="ชื่อผู้สั่ง *"
@@ -375,74 +394,32 @@ export function CartSheet({
               )}
 
               {!qrMode && (
-                <Box>
-                  <Typography variant="caption" sx={{ mb: 0.75, color: 'text.secondary' }}>
-                    รูปแบบการรับอาหาร
-                  </Typography>
-                  <Box
-                    sx={{
-                      mt: 0.75,
-                      display: 'grid',
-                      gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
-                      gap: 1,
-                    }}
-                  >
-                    {(
-                      [
-                        ['dine-in', '🍽️', 'ทานที่ร้าน', 'เลือกหมายเลขโต๊ะ'],
-                        ['takeaway', '🛍️', 'รับกลับบ้าน', 'รับอาหารที่ร้าน'],
-                      ] as const
-                    ).map(([value, emoji, label, description]) => {
-                      const isSelected = customer.orderType === value;
-
-                      return (
-                        <ButtonBase
-                          key={value}
-                          onClick={() => onChangeCustomer({ orderType: value })}
-                          aria-pressed={isSelected}
-                          sx={{
-                            p: 1.25,
-                            display: 'block',
-                            textAlign: 'left',
-                            borderRadius: 2,
-                            border: '2px solid',
-                            borderColor: isSelected ? 'primary.main' : 'grey.200',
-                            bgcolor: isSelected ? '#FFF0ED' : 'common.white',
-                          }}
-                        >
-                          <Typography sx={{ fontSize: 22, lineHeight: 1 }}>{emoji}</Typography>
-                          <Typography variant="subtitle2" sx={{ mt: 0.75 }}>
-                            {label}
-                          </Typography>
-                          <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-                            {description}
-                          </Typography>
-                        </ButtonBase>
-                      );
-                    })}
-                  </Box>
-                </Box>
-              )}
-
-              {!qrMode && customer.orderType === 'dine-in' && (
-                <TextField
-                  select
-                  label="หมายเลขโต๊ะ *"
-                  value={customer.tableNumber}
-                  onChange={(e) => onChangeCustomer({ tableNumber: e.target.value })}
-                  helperText={
-                    tables.length === 0 ? 'ยังไม่มีข้อมูลโต๊ะ กรุณาติดต่อพนักงาน' : undefined
-                  }
-                  disabled={tables.length === 0}
-                  slotProps={{ input: { sx: { borderRadius: 2 } } }}
-                  fullWidth
+                <Stack
+                  direction="row"
+                  alignItems="center"
+                  spacing={1.25}
+                  sx={{
+                    p: 1.5,
+                    borderRadius: 2,
+                    bgcolor: '#FFF7E8',
+                    border: '1px solid #F6E1AE',
+                  }}
                 >
-                  {tables.map((table) => (
-                    <MenuItem key={table.id} value={table.label}>
-                      โต๊ะ {table.label}
-                    </MenuItem>
-                  ))}
-                </TextField>
+                  <Iconify
+                    icon={'solar:bag-smile-bold' as IconifyName}
+                    width={20}
+                    sx={{ color: '#B98900' }}
+                  />
+                  <Box sx={{ flex: 1 }}>
+                    <Typography variant="body2">คำสั่งซื้อนี้เป็นแบบรับกลับบ้าน</Typography>
+                    <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+                      ต้องการทานที่ร้าน? สแกน QR โค้ดที่โต๊ะของคุณ
+                    </Typography>
+                  </Box>
+                  <Button size="small" variant="outlined" onClick={onScanTable} sx={{ flexShrink: 0 }}>
+                    สแกน QR
+                  </Button>
+                </Stack>
               )}
 
               <TextField

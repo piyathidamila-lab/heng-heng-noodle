@@ -16,6 +16,7 @@ import { fTime } from 'src/utils/format-time';
 import { useConfirmDialog } from 'src/components/custom-dialog';
 
 import { OpenTablesPanel } from './open-tables-panel';
+import { useNewOrderAlert } from './use-new-order-alert';
 import { listOrdersAdmin, updateOrderStatus } from './order-admin-actions';
 import { NEXT_STATUS, STATUS_COLOR, STATUS_LABEL } from './order-status-config';
 
@@ -37,6 +38,9 @@ export function AdminOrdersView({ initialOrders, initialSessions }: Props) {
   const [orders, setOrders] = useState(initialOrders);
   const [filter, setFilter] = useState<'active' | 'all'>('active');
   const { confirm, dialog } = useConfirmDialog();
+
+  const orderIds = useMemo(() => orders.map((order) => order.id), [orders]);
+  useNewOrderAlert(orderIds);
 
   useEffect(() => {
     let active = true;

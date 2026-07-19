@@ -22,6 +22,7 @@ const NAV_ITEMS = [
   { label: 'ออเดอร์', path: '/staff/orders' },
   { label: 'ประวัติออเดอร์', path: '/staff/order-history' },
   { label: 'เช็คบิล', path: '/staff/bills' },
+  { label: 'แลกของรางวัล', path: '/staff/redemptions' },
 ];
 
 type Props = {
@@ -90,7 +91,17 @@ export function StaffShell({ shopName, displayName, children }: Props) {
             </Box>
           </Box>
 
-          <Tabs value={activeTab} sx={{ minHeight: 48 }}>
+          <Tabs
+            value={activeTab}
+            variant="scrollable"
+            scrollButtons="auto"
+            allowScrollButtonsMobile
+            aria-label="เมนูหน้าร้าน"
+            sx={{
+              minHeight: 48,
+              '& .MuiTabs-flexContainer': { gap: { xs: 0, sm: 0.5 } },
+            }}
+          >
             {NAV_ITEMS.map((item) => (
               <Tab
                 key={item.path}

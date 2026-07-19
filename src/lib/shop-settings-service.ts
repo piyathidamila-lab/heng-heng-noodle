@@ -12,12 +12,18 @@ export type ShopSettings = {
   closeTime: string;
   customOrder: CustomOrderConfig;
   announcement: AnnouncementConfig;
+  loyalty: LoyaltyConfig;
   isOpen: boolean;
 };
 
 export type AnnouncementConfig = {
   enabled: boolean;
   message: string;
+};
+
+export type LoyaltyConfig = {
+  enabled: boolean;
+  bahtPerStar: number;
 };
 
 export type CustomOrderOption = {
@@ -45,7 +51,7 @@ export type CustomOrderSelection = {
 export type ShopSettingsInput = ShopSettings;
 
 const SELECT_COLUMNS =
-  'name, address, phone, promptpay_id, open_time, close_time, custom_order_enabled, custom_order_title, custom_order_steps, announcement_enabled, announcement_message, is_open';
+  'name, address, phone, promptpay_id, open_time, close_time, custom_order_enabled, custom_order_title, custom_order_steps, announcement_enabled, announcement_message, loyalty_enabled, loyalty_baht_per_star, is_open';
 
 type ShopSettingsRow = {
   name: string;
@@ -59,6 +65,8 @@ type ShopSettingsRow = {
   custom_order_steps: unknown;
   announcement_enabled: boolean;
   announcement_message: string;
+  loyalty_enabled: boolean;
+  loyalty_baht_per_star: number;
   is_open: boolean;
 };
 
@@ -159,6 +167,10 @@ function mapRow(row: ShopSettingsRow): ShopSettings {
       enabled: row.announcement_enabled,
       message: row.announcement_message,
     },
+    loyalty: {
+      enabled: row.loyalty_enabled,
+      bahtPerStar: Number(row.loyalty_baht_per_star),
+    },
     isOpen: row.is_open,
   };
 }
@@ -178,6 +190,10 @@ const DEFAULT_SETTINGS: ShopSettings = {
   announcement: {
     enabled: false,
     message: '',
+  },
+  loyalty: {
+    enabled: false,
+    bahtPerStar: 100,
   },
   isOpen: true,
 };
@@ -211,6 +227,8 @@ export async function updateShopSettingsRecord(input: ShopSettingsInput): Promis
       custom_order_steps: normalizeCustomOrderSteps(input.customOrder.steps),
       announcement_enabled: input.announcement.enabled,
       announcement_message: input.announcement.message.trim().slice(0, 500),
+      loyalty_enabled: input.loyalty.enabled,
+      loyalty_baht_per_star: Math.max(1, Number(input.loyalty.bahtPerStar) || 1),
     })
     .eq('id', true)
     .select(SELECT_COLUMNS)

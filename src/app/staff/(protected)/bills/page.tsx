@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 
 import { getBillHistory } from 'src/lib/order-service';
 
-import { AdminBillsView } from 'src/sections/admin/bills/admin-bills-view';
+import { StaffBillsView } from 'src/sections/staff/bills/staff-bills-view';
 
 // ----------------------------------------------------------------------
 
@@ -11,5 +11,5 @@ export const metadata: Metadata = { title: 'เช็คบิล | เฮงเ
 export default async function Page() {
   const bills = await getBillHistory();
 
-  return <AdminBillsView initialBills={bills} />;
+  return <StaffBillsView initialBills={bills} />;
 }

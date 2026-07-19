@@ -2,8 +2,8 @@ import type { Metadata } from 'next';
 
 import { Suspense } from 'react';
 
-import { getTables } from 'src/lib/table-service';
 import { getCategories } from 'src/lib/category-service';
+import { getCurrentMember } from 'src/lib/member-session';
 import { getPublicMenuItems } from 'src/lib/menu-service';
 import { getShopSettings } from 'src/lib/shop-settings-service';
 import { getBestSellerItems } from 'src/lib/best-seller-service';
@@ -22,12 +22,12 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 
 export default async function Page() {
-  const [items, categories, bestSellers, tables, shop] = await Promise.all([
+  const [items, categories, bestSellers, shop, member] = await Promise.all([
     getPublicMenuItems(),
     getCategories(),
     getBestSellerItems(),
-    getTables(),
     getShopSettings(),
+    getCurrentMember(),
   ]);
 
   return (
@@ -36,8 +36,8 @@ export default async function Page() {
         items={items}
         categories={categories}
         bestSellers={bestSellers}
-        tables={tables}
         shop={shop}
+        member={member}
       />
     </Suspense>
   );

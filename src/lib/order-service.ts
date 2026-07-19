@@ -2,6 +2,7 @@ import type { CustomOrderSelection } from './shop-settings-service';
 
 import { getSupabaseAdmin } from './supabase-admin';
 import { getShopSettings } from './shop-settings-service';
+import { awardStarsForOrder, awardStarsForSession } from './loyalty-service';
 
 // ----------------------------------------------------------------------
 
@@ -38,6 +39,8 @@ export type CreateOrderInput = {
     quantity: number;
     customization?: CustomOrderSelection;
   }[];
+  /** Resolved server-side from the member session cookie — never taken from client input. */
+  customerId?: string;
 };
 
 export class OrderValidationError extends Error {}
@@ -52,22 +55,29 @@ function formatOrderNumber(seq: number): string {
  * partial unique index) — this is what lets the QR table view show just
  * the current diners' orders instead of every order ever placed there.
  */
-async function getOrCreateOpenSession(tableNumber: string): Promise<string> {
+async function getOrCreateOpenSession(tableNumber: string, customerId?: string): Promise<string> {
   const supabase = getSupabaseAdmin();
 
   const { data: existing, error: selectError } = await supabase
     .from('table_sessions')
-    .select('id')
+    .select('id, customer_id')
     .eq('table_number', tableNumber)
     .eq('status', 'open')
     .maybeSingle();
 
   if (selectError) throw selectError;
-  if (existing) return existing.id;
+  if (existing) {
+    // First logged-in member to order in this session "claims" it for star
+    // awarding — later orders (guest or a different member) don't override it.
+    if (customerId && !existing.customer_id) {
+      await supabase.from('table_sessions').update({ customer_id: customerId }).eq('id', existing.id);
+    }
+    return existing.id;
+  }
 
   const { data: created, error: insertError } = await supabase
     .from('table_sessions')
-    .insert({ table_number: tableNumber })
+    .insert({ table_number: tableNumber, customer_id: customerId ?? null })
     .select('id')
     .single();
 
@@ -185,7 +195,9 @@ export async function createOrderRecord(input: CreateOrderInput): Promise<OrderR
 
   const tableNumber = input.orderType === 'dine-in' ? input.tableNumber.trim() : '';
   const sessionId =
-    input.orderType === 'dine-in' ? await getOrCreateOpenSession(tableNumber) : null;
+    input.orderType === 'dine-in'
+      ? await getOrCreateOpenSession(tableNumber, input.customerId)
+      : null;
 
   const { data: order, error: orderError } = await supabase
     .from('orders')
@@ -196,6 +208,7 @@ export async function createOrderRecord(input: CreateOrderInput): Promise<OrderR
       table_number: tableNumber,
       note: input.note.trim(),
       total,
+      customer_id: input.orderType === 'takeaway' ? input.customerId ?? null : null,
     })
     .select(
       'id, seq, customer_name, customer_phone, order_type, table_number, note, status, total, created_at'
@@ -391,12 +404,113 @@ export async function getOrdersByTable(tableNumber: string): Promise<TableOrderS
   }));
 }
 
+export type MemberOrderItem = {
+  name: string;
+  emoji: string;
+  price: number;
+  quantity: number;
+};
+
+export type MemberOrderSummary = {
+  id: string;
+  orderNumber: string;
+  orderTime: string;
+  orderType: 'dine-in' | 'takeaway';
+  tableNumber: string;
+  total: number;
+  items: MemberOrderItem[];
+};
+
+const MEMBER_ORDER_SELECT =
+  'id, seq, order_type, table_number, total, created_at, order_items (name, price, quantity, menu_items (emoji))';
+
+type MemberOrderRow = {
+  id: string;
+  seq: number;
+  order_type: 'dine-in' | 'takeaway';
+  table_number: string;
+  total: number;
+  created_at: string;
+  order_items:
+    | { name: string; price: number; quantity: number; menu_items: { emoji: string } | null }[]
+    | null;
+};
+
+function mapMemberOrderRow(order: MemberOrderRow): MemberOrderSummary {
+  return {
+    id: order.id,
+    orderNumber: formatOrderNumber(order.seq),
+    orderTime: order.created_at,
+    orderType: order.order_type,
+    tableNumber: order.table_number,
+    total: Number(order.total),
+    items: (order.order_items ?? []).map((item) => ({
+      name: item.name,
+      emoji: item.menu_items?.emoji ?? '🍜',
+      price: Number(item.price),
+      quantity: item.quantity,
+    })),
+  };
+}
+
+/**
+ * A member's own past orders, newest first — takeaway orders are attributed
+ * directly via orders.customer_id, dine-in orders via the table_sessions row
+ * they claimed by being first to order in it (see getOrCreateOpenSession).
+ */
+export async function getMemberOrderHistory(
+  customerId: string,
+  limit = 20
+): Promise<MemberOrderSummary[]> {
+  const supabase = getSupabaseAdmin();
+
+  const [takeaway, dineIn] = await Promise.all([
+    supabase
+      .from('orders')
+      .select(MEMBER_ORDER_SELECT)
+      .eq('customer_id', customerId)
+      .neq('status', 'cancelled')
+      .order('created_at', { ascending: false })
+      .limit(limit),
+    supabase
+      .from('orders')
+      .select(`${MEMBER_ORDER_SELECT}, table_sessions!inner (customer_id)`)
+      .eq('table_sessions.customer_id', customerId)
+      .neq('status', 'cancelled')
+      .order('created_at', { ascending: false })
+      .limit(limit),
+  ]);
+
+  if (takeaway.error) throw takeaway.error;
+  if (dineIn.error) throw dineIn.error;
+
+  return [...(takeaway.data ?? []), ...(dineIn.data ?? [])]
+    .map((row) => mapMemberOrderRow(row as unknown as MemberOrderRow))
+    .sort((a, b) => new Date(b.orderTime).getTime() - new Date(a.orderTime).getTime())
+    .slice(0, limit);
+}
+
+/** Bare status lookup for a single order by id — used to let a customer track their own takeaway order. */
+export async function getOrderStatusById(id: string): Promise<OrderStatus | null> {
+  const supabase = getSupabaseAdmin();
+
+  const { data, error } = await supabase.from('orders').select('status').eq('id', id).maybeSingle();
+
+  if (error) throw error;
+
+  return data?.status ?? null;
+}
+
 export async function updateOrderStatusRecord(id: string, status: OrderStatus): Promise<void> {
   const supabase = getSupabaseAdmin();
 
   const { error } = await supabase.from('orders').update({ status }).eq('id', id);
 
   if (error) throw error;
+
+  if (status === 'completed') {
+    await awardStarsForOrder(id);
+  }
 }
 
 export type TableSessionSummary = {
@@ -451,6 +565,8 @@ export async function closeTableSessionRecord(id: string): Promise<void> {
     .eq('status', 'open');
 
   if (error) throw error;
+
+  await awardStarsForSession(id);
 }
 
 export type BillSummary = {

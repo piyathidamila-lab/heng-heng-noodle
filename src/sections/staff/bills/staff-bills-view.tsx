@@ -1,0 +1,324 @@
+'use client';
+
+import type { Dayjs } from 'dayjs';
+import type { BillSummary } from 'src/lib/order-service';
+
+import dayjs from 'dayjs';
+import { useMemo, useState, useEffect, useCallback } from 'react';
+
+import Box from '@mui/material/Box';
+import Chip from '@mui/material/Chip';
+import Stack from '@mui/material/Stack';
+import ButtonBase from '@mui/material/ButtonBase';
+import Typography from '@mui/material/Typography';
+import { DatePicker } from '@mui/x-date-pickers/DatePicker';
+
+import { fTime, fDateTime } from 'src/utils/format-time';
+
+import { Iconify } from 'src/components/iconify';
+
+import { BillDialog } from 'src/sections/admin/orders/bill-dialog';
+import { listBillHistoryAdmin } from 'src/sections/admin/orders/table-session-actions';
+
+import { StaffPageHero } from '../components/staff-page-hero';
+
+// ----------------------------------------------------------------------
+
+const DATE_FORMAT = 'YYYY-MM-DD';
+type PresetKey = 'today' | 'yesterday' | 'last7' | 'thisMonth' | 'all';
+
+const PRESETS: { value: PresetKey; label: string }[] = [
+  { value: 'all', label: 'ทั้งหมด' },
+  { value: 'today', label: 'วันนี้' },
+  { value: 'yesterday', label: 'เมื่อวาน' },
+  { value: 'last7', label: '7 วันล่าสุด' },
+  { value: 'thisMonth', label: 'เดือนนี้' },
+];
+
+function presetRange(preset: PresetKey): { from: Dayjs | null; to: Dayjs | null } {
+  const now = dayjs();
+  if (preset === 'today') return { from: now.startOf('day'), to: now.endOf('day') };
+  if (preset === 'yesterday') {
+    const yesterday = now.subtract(1, 'day');
+    return { from: yesterday.startOf('day'), to: yesterday.endOf('day') };
+  }
+  if (preset === 'last7') return { from: now.subtract(6, 'day'), to: now.endOf('day') };
+  if (preset === 'thisMonth') return { from: now.startOf('month'), to: now.endOf('month') };
+  return { from: null, to: null };
+}
+
+type Props = { initialBills: BillSummary[] };
+
+export function StaffBillsView({ initialBills }: Props) {
+  const [bills, setBills] = useState(initialBills);
+  const [preset, setPreset] = useState<PresetKey>('all');
+  const [from, setFrom] = useState<Dayjs | null>(null);
+  const [to, setTo] = useState<Dayjs | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [activeBill, setActiveBill] = useState<BillSummary | null>(null);
+  const [status, setStatus] = useState<'open' | 'closed'>('open');
+
+  const fetchBills = useCallback(async (nextFrom: Dayjs | null, nextTo: Dayjs | null) => {
+    setLoading(true);
+    try {
+      setBills(
+        await listBillHistoryAdmin({
+          from: nextFrom?.format(DATE_FORMAT),
+          to: nextTo?.format(DATE_FORMAT),
+        })
+      );
+    } catch (error) {
+      console.error(error);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (preset === 'all' && !from && !to) return;
+    fetchBills(from, to);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [from, to]);
+
+  const summary = useMemo(() => {
+    const closed = bills.filter((bill) => bill.status === 'closed');
+    return {
+      open: bills.length - closed.length,
+      closed: closed.length,
+      total: closed.reduce((sum, bill) => sum + bill.total, 0),
+    };
+  }, [bills]);
+  const visibleBills = bills.filter((bill) => bill.status === status);
+
+  const handlePreset = (value: PresetKey) => {
+    const range = presetRange(value);
+    setPreset(value);
+    setFrom(range.from);
+    setTo(range.to);
+  };
+
+  const handleTableClosed = (id: string) => {
+    setBills((current) =>
+      current.map((bill) =>
+        bill.id === id ? { ...bill, status: 'closed', closedAt: new Date().toISOString() } : bill
+      )
+    );
+  };
+
+  return (
+    <Box sx={{ pb: 4 }}>
+      <StaffPageHero
+        title="เช็คบิล"
+        subtitle="ตรวจยอด ชำระเงิน และปิดโต๊ะ"
+        icon="solar:bill-list-bold-duotone"
+        badge={summary.open > 0 ? `รอเช็คบิล ${summary.open} โต๊ะ` : 'ไม่มีโต๊ะค้างชำระ'}
+      />
+
+      <Box
+        sx={{
+          display: 'grid',
+          gridTemplateColumns: { xs: 'repeat(2, 1fr)', md: 'repeat(3, 1fr)' },
+          gap: 1.5,
+          mb: 3,
+        }}
+      >
+        {[
+          ['โต๊ะที่เปิดอยู่', summary.open, 'โต๊ะ', '🧾', '#FFF6DD'],
+          ['ชำระแล้ว', summary.closed, 'บิล', '✅', '#E5F8ED'],
+          ['ยอดชำระแล้ว', `฿${summary.total.toLocaleString('th-TH')}`, '', '💰', '#EAF4FF'],
+        ].map(([label, value, unit, emoji, color], index) => (
+          <Stack
+            key={label}
+            direction="row"
+            spacing={1.5}
+            alignItems="center"
+            sx={{
+              p: 2,
+              minHeight: 100,
+              borderRadius: 2.5,
+              bgcolor: 'common.white',
+              gridColumn: { xs: index === 2 ? '1 / -1' : 'auto', md: 'auto' },
+            }}
+          >
+            <Box
+              sx={{
+                width: 46,
+                height: 46,
+                display: 'grid',
+                placeItems: 'center',
+                borderRadius: 2,
+                bgcolor: color,
+                fontSize: 23,
+              }}
+            >
+              {emoji}
+            </Box>
+            <Box>
+              <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+                {label}
+              </Typography>
+              <Stack direction="row" spacing={0.5} alignItems="baseline">
+                <Typography variant="h4">{value}</Typography>
+                {unit && <Typography variant="caption">{unit}</Typography>}
+              </Stack>
+            </Box>
+          </Stack>
+        ))}
+      </Box>
+
+      <Stack
+        spacing={2}
+        sx={{ p: 2, mb: 3, borderRadius: 3, border: '1px solid', borderColor: 'grey.200', bgcolor: 'common.white' }}
+      >
+        <Stack direction="row" alignItems="center" spacing={1}>
+          <Iconify icon="solar:calendar-date-bold" width={22} sx={{ color: 'primary.main' }} />
+          <Typography variant="h6">กรองตามวันที่</Typography>
+          {loading && <Chip size="small" label="กำลังโหลด..." color="info" />}
+        </Stack>
+        <Stack direction="row" flexWrap="wrap" gap={1}>
+          {PRESETS.map((item) => (
+            <Chip
+              key={item.value}
+              label={item.label}
+              onClick={() => handlePreset(item.value)}
+              color={preset === item.value ? 'primary' : 'default'}
+              variant={preset === item.value ? 'filled' : 'outlined'}
+            />
+          ))}
+        </Stack>
+        <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5}>
+          <DatePicker
+            label="จากวันที่"
+            value={from}
+            onChange={(value) => {
+              setPreset('all');
+              setFrom(value?.startOf('day') ?? null);
+            }}
+            slotProps={{ textField: { fullWidth: true } }}
+          />
+          <DatePicker
+            label="ถึงวันที่"
+            value={to}
+            onChange={(value) => {
+              setPreset('all');
+              setTo(value?.endOf('day') ?? null);
+            }}
+            slotProps={{ textField: { fullWidth: true } }}
+          />
+        </Stack>
+      </Stack>
+
+      <Stack direction="row" spacing={1} sx={{ mb: 2 }}>
+        <Chip
+          label={`รอเช็คบิล ${summary.open}`}
+          onClick={() => setStatus('open')}
+          color={status === 'open' ? 'primary' : 'default'}
+          variant={status === 'open' ? 'filled' : 'outlined'}
+        />
+        <Chip
+          label={`ชำระแล้ว ${summary.closed}`}
+          onClick={() => setStatus('closed')}
+          color={status === 'closed' ? 'primary' : 'default'}
+          variant={status === 'closed' ? 'filled' : 'outlined'}
+        />
+      </Stack>
+
+      {visibleBills.length === 0 ? (
+        <Stack alignItems="center" spacing={1.25} sx={{ p: 6, borderRadius: 3, bgcolor: 'common.white' }}>
+          <Box sx={{ fontSize: 42 }}>{status === 'open' ? '🎉' : '🧾'}</Box>
+          <Typography variant="h6">
+            {status === 'open' ? 'ไม่มีโต๊ะค้างชำระ' : 'ไม่พบบิลที่ชำระแล้ว'}
+          </Typography>
+          <Typography variant="body2" sx={{ color: 'text.secondary', textAlign: 'center' }}>
+            {status === 'open' ? 'ทุกโต๊ะได้รับการจัดการเรียบร้อยแล้ว' : 'ลองเลือกช่วงเวลาอื่น'}
+          </Typography>
+        </Stack>
+      ) : (
+        <Box
+          sx={{
+            display: 'grid',
+            gap: 1.5,
+            gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)', lg: 'repeat(3, 1fr)' },
+          }}
+        >
+          {visibleBills.map((bill) => {
+            const isOpen = bill.status === 'open';
+            return (
+              <ButtonBase
+                key={bill.id}
+                onClick={() => setActiveBill(bill)}
+                aria-label={`${isOpen ? 'เช็คบิล' : 'ดูบิล'} โต๊ะ ${bill.tableNumber}`}
+                sx={{ display: 'block', textAlign: 'left', borderRadius: 3 }}
+              >
+                <Stack
+                  spacing={1.5}
+                  sx={{
+                    height: 1,
+                    p: 2,
+                    borderRadius: 3,
+                    border: '1px solid',
+                    borderColor: isOpen ? '#F1CB79' : '#B5E2C8',
+                    bgcolor: 'common.white',
+                    boxShadow: '0 6px 20px rgba(33,43,54,0.05)',
+                  }}
+                >
+                  <Stack direction="row" alignItems="flex-start" justifyContent="space-between">
+                    <Stack direction="row" spacing={1.25} alignItems="center">
+                      <Box
+                        sx={{
+                          width: 48,
+                          height: 48,
+                          display: 'grid',
+                          placeItems: 'center',
+                          borderRadius: 2,
+                          bgcolor: isOpen ? '#FFF6DD' : '#E5F8ED',
+                          fontSize: 25,
+                        }}
+                      >
+                        {isOpen ? '🧾' : '✅'}
+                      </Box>
+                      <Box>
+                        <Typography variant="h5">โต๊ะ {bill.tableNumber}</Typography>
+                        <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+                          {bill.orderCount} ออเดอร์
+                        </Typography>
+                      </Box>
+                    </Stack>
+                    <Chip
+                      size="small"
+                      label={isOpen ? 'รอชำระ' : 'ชำระแล้ว'}
+                      color={isOpen ? 'warning' : 'success'}
+                    />
+                  </Stack>
+                  <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+                    {isOpen ? `เปิดเมื่อ ${fTime(bill.openedAt)} น.` : `ปิดเมื่อ ${fDateTime(bill.closedAt)}`}
+                  </Typography>
+                  <Stack direction="row" alignItems="flex-end" justifyContent="space-between">
+                    <Box>
+                      <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+                        ยอดสุทธิ
+                      </Typography>
+                      <Typography variant="h4" sx={{ color: 'primary.main' }}>
+                        ฿{bill.total.toLocaleString('th-TH')}
+                      </Typography>
+                    </Box>
+                    <Stack direction="row" spacing={0.5} alignItems="center" sx={{ color: 'primary.main' }}>
+                      <Typography variant="subtitle2">{isOpen ? 'เช็คบิล' : 'ดูรายละเอียด'}</Typography>
+                      <Iconify icon="solar:double-alt-arrow-right-bold-duotone" width={18} />
+                    </Stack>
+                  </Stack>
+                </Stack>
+              </ButtonBase>
+            );
+          })}
+        </Box>
+      )}
+
+      <BillDialog
+        session={activeBill}
+        onClose={() => setActiveBill(null)}
+        onTableClosed={handleTableClosed}
+      />
+    </Box>
+  );
+}

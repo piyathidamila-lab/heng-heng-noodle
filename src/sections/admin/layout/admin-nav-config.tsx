@@ -54,6 +54,11 @@ export const adminNavData: NavSectionProps['data'] = [
         icon: <Iconify icon={'solar:tuning-4-bold' as IconifyName} width={24} />,
       },
       {
+        title: 'สะสมดาว',
+        path: '/admin/loyalty',
+        icon: <Iconify icon={'solar:star-bold' as IconifyName} width={24} />,
+      },
+      {
         title: 'ข้อมูลร้านค้า',
         path: '/admin/settings',
         icon: <Iconify icon="solar:settings-bold" width={24} />,

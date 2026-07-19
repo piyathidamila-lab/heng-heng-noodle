@@ -334,3 +334,110 @@ create index if not exists admin_sessions_user_id_idx on public.admin_sessions (
 insert into storage.buckets (id, name, public)
 values ('menu-images', 'menu-images', true)
 on conflict (id) do update set public = true;
+
+-- ----------------------------------------------------------------------
+-- Star loyalty program — customers register with phone + PIN, earn stars
+-- when a bill is paid (dine-in) or a takeaway order is completed, and can
+-- request to redeem rewards (subject to staff/admin approval).
+-- ----------------------------------------------------------------------
+
+alter table public.shop_settings add column if not exists loyalty_enabled boolean not null default false;
+alter table public.shop_settings add column if not exists loyalty_baht_per_star numeric(10, 2) not null default 100;
+
+create table if not exists public.customers (
+  id uuid primary key default gen_random_uuid(),
+  phone text not null unique,
+  pin_hash text not null,
+  display_name text not null default '',
+  stars_balance integer not null default 0 check (stars_balance >= 0),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+alter table public.customers enable row level security;
+-- No policies for anon/authenticated: PIN hashes and star balances are only
+-- ever read/written from the server via the service-role key.
+
+drop trigger if exists customers_set_updated_at on public.customers;
+create trigger customers_set_updated_at
+  before update on public.customers
+  for each row
+  execute function public.set_updated_at();
+
+create table if not exists public.customer_sessions (
+  id uuid primary key default gen_random_uuid(),
+  customer_id uuid not null references public.customers (id) on delete cascade,
+  expires_at timestamptz not null,
+  created_at timestamptz not null default now()
+);
+
+alter table public.customer_sessions enable row level security;
+-- No policies for anon/authenticated: server-only via the service-role key.
+
+create index if not exists customer_sessions_customer_id_idx on public.customer_sessions (customer_id);
+
+create table if not exists public.star_ledger (
+  id uuid primary key default gen_random_uuid(),
+  customer_id uuid not null references public.customers (id) on delete cascade,
+  delta integer not null,
+  reason text not null check (reason in ('order_earn', 'session_earn', 'redeem_request', 'redeem_refund')),
+  reference_type text,
+  reference_id uuid,
+  created_at timestamptz not null default now()
+);
+
+alter table public.star_ledger enable row level security;
+-- No policies for anon/authenticated: server-only via the service-role key.
+
+create index if not exists star_ledger_customer_id_idx on public.star_ledger (customer_id);
+
+create table if not exists public.loyalty_rewards (
+  id uuid primary key default gen_random_uuid(),
+  name text not null,
+  description text not null default '',
+  stars_cost integer not null check (stars_cost > 0),
+  is_active boolean not null default true,
+  sort_order integer not null default 0,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+alter table public.loyalty_rewards enable row level security;
+
+-- Customers browse the reward catalog with the anon key, same as menu_items.
+drop policy if exists "loyalty_rewards are publicly readable" on public.loyalty_rewards;
+create policy "loyalty_rewards are publicly readable"
+  on public.loyalty_rewards for select
+  to anon, authenticated
+  using (true);
+
+drop trigger if exists loyalty_rewards_set_updated_at on public.loyalty_rewards;
+create trigger loyalty_rewards_set_updated_at
+  before update on public.loyalty_rewards
+  for each row
+  execute function public.set_updated_at();
+
+create table if not exists public.loyalty_redemptions (
+  id uuid primary key default gen_random_uuid(),
+  customer_id uuid not null references public.customers (id) on delete cascade,
+  reward_id uuid references public.loyalty_rewards (id) on delete set null,
+  reward_name text not null,
+  stars_cost integer not null,
+  status text not null default 'pending' check (status in ('pending', 'fulfilled', 'rejected')),
+  requested_at timestamptz not null default now(),
+  decided_at timestamptz,
+  decided_by uuid references public.admin_users (id) on delete set null
+);
+
+alter table public.loyalty_redemptions enable row level security;
+-- No policies for anon/authenticated: server-only via the service-role key.
+
+create index if not exists loyalty_redemptions_customer_id_idx on public.loyalty_redemptions (customer_id);
+create index if not exists loyalty_redemptions_status_idx on public.loyalty_redemptions (status);
+
+-- Links an order/table session to the member who placed it, so stars can be
+-- awarded to the right account when the bill is paid / order completed.
+alter table public.orders add column if not exists customer_id uuid references public.customers (id) on delete set null;
+alter table public.orders add column if not exists stars_awarded boolean not null default false;
+alter table public.table_sessions add column if not exists customer_id uuid references public.customers (id) on delete set null;
+alter table public.table_sessions add column if not exists stars_awarded boolean not null default false;

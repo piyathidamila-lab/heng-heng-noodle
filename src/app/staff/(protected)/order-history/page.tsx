@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 
 import { getOrderHistory } from 'src/lib/order-service';
 
-import { AdminOrderHistoryView } from 'src/sections/admin/order-history/admin-order-history-view';
+import { StaffOrderHistoryView } from 'src/sections/staff/order-history/staff-order-history-view';
 
 // ----------------------------------------------------------------------
 
@@ -11,5 +11,5 @@ export const metadata: Metadata = { title: 'ประวัติออเดอ
 export default async function Page() {
   const orders = await getOrderHistory();
 
-  return <AdminOrderHistoryView initialOrders={orders} />;
+  return <StaffOrderHistoryView initialOrders={orders} />;
 }

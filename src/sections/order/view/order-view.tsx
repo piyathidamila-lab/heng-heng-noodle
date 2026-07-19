@@ -3,17 +3,16 @@
 import type { MenuItem } from '../menu-data';
 import type { CartLine } from '../components/cart-sheet';
 import type { IconifyName } from 'src/components/iconify';
+import type { SessionMember } from 'src/lib/member-session';
 import type { MenuCategory } from 'src/lib/category-service';
-import type { RestaurantTable } from 'src/lib/table-service';
+import type { MemberOrderSummary } from 'src/lib/order-service';
 import type { ShopSettings, CustomOrderSelection } from 'src/lib/shop-settings-service';
 
 import { RiBookOpenLine } from '@remixicon/react';
-import { useMemo, useState, useLayoutEffect } from 'react';
+import { useRef, useMemo, useState, useEffect, useLayoutEffect } from 'react';
 
 import Box from '@mui/material/Box';
-import Tab from '@mui/material/Tab';
 import Chip from '@mui/material/Chip';
-import Tabs from '@mui/material/Tabs';
 import Stack from '@mui/material/Stack';
 import Badge from '@mui/material/Badge';
 import Button from '@mui/material/Button';
@@ -27,18 +26,29 @@ import { Logo } from 'src/components/logo';
 import { toast } from 'src/components/snackbar';
 import { Iconify } from 'src/components/iconify';
 
-import { placeOrder } from '../order-actions';
+import { logoutMemberAction } from 'src/sections/loyalty/loyalty-actions';
+
 import { CartSheet } from '../components/cart-sheet';
 import { MenuItemCard } from '../components/menu-item-card';
 import { TableNameGate } from '../components/table-name-gate';
 import { OrderConfirmed } from '../components/order-confirmed';
+import { placeOrder, getMyOrderHistory } from '../order-actions';
 import { QrScannerDialog } from '../components/qr-scanner-dialog';
 import { BestSellerStrip } from '../components/best-seller-strip';
 import { TableOrdersPanel } from '../components/table-orders-panel';
-import { saveTableName, getSavedTableName } from '../table-session';
+import { ActiveOrderStatus } from '../components/active-order-status';
 import { CustomOrderDialog } from '../components/custom-order-dialog';
 import { OrderHistoryPanel } from '../components/order-history-panel';
-import { getOrderHistory, addOrderToHistory } from '../order-history';
+import { TableLockedNotice } from '../components/table-locked-notice';
+import { listTableAvailability } from '../table-availability-actions';
+import {
+  saveTableName,
+  setActiveTable,
+  getActiveTable,
+  clearTableName,
+  clearActiveTable,
+  getSavedTableName,
+} from '../table-session';
 
 // ----------------------------------------------------------------------
 
@@ -51,7 +61,7 @@ export type CustomerInfo = {
 
 const EMPTY_CUSTOMER: CustomerInfo = {
   name: '',
-  orderType: 'dine-in',
+  orderType: 'takeaway',
   tableNumber: '',
   note: '',
 };
@@ -68,17 +78,19 @@ type Props = {
   items: MenuItem[];
   categories: MenuCategory[];
   bestSellers: MenuItem[];
-  tables: RestaurantTable[];
   shop: ShopSettings;
+  member: SessionMember | null;
 };
 
-export function OrderView({ items, categories, bestSellers, tables, shop }: Props) {
+export function OrderView({ items, categories, bestSellers, shop, member }: Props) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const qrTable = searchParams.get('table')?.trim().slice(0, 20) || null;
 
   const [tableName, setTableName] = useState<string | null>(null);
   const [nameChecked, setNameChecked] = useState(false);
+  const [lockChecked, setLockChecked] = useState(false);
+  const [blockedByTable, setBlockedByTable] = useState<string | null>(null);
   const [view, setView] = useState<'menu' | 'orders'>('menu');
   const [showHistory, setShowHistory] = useState(false);
   const [scannerOpen, setScannerOpen] = useState(false);
@@ -91,12 +103,133 @@ export function OrderView({ items, categories, bestSellers, tables, shop }: Prop
   const [customer, setCustomer] = useState<CustomerInfo>(EMPTY_CUSTOMER);
   const [confirmedOrder, setConfirmedOrder] = useState<ConfirmedOrder | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [historyOrders, setHistoryOrders] = useState<MemberOrderSummary[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
 
   useLayoutEffect(() => {
     if (qrTable) {
       setTableName(getSavedTableName(qrTable));
     }
     setNameChecked(true);
+  }, [qrTable]);
+
+  // Stops a single device from having more than one table "open" at once: if
+  // this device already claimed a different table, block scanning/opening a
+  // new one until that other table's session is confirmed closed server-side.
+  useEffect(() => {
+    let cancelled = false;
+
+    async function checkLock() {
+      if (!qrTable) {
+        setBlockedByTable(null);
+        setLockChecked(true);
+        return;
+      }
+
+      const active = getActiveTable();
+      if (!active || active === qrTable) {
+        setBlockedByTable(null);
+        setLockChecked(true);
+        return;
+      }
+
+      try {
+        const availability = await listTableAvailability();
+        if (cancelled) return;
+
+        const stillOpen = availability.some(
+          (table) => table.label === active && table.status === 'occupied'
+        );
+        if (stillOpen) {
+          setBlockedByTable(active);
+        } else {
+          clearActiveTable();
+          setBlockedByTable(null);
+        }
+      } catch (error) {
+        console.error(error);
+        setBlockedByTable(null);
+      } finally {
+        if (!cancelled) setLockChecked(true);
+      }
+    }
+
+    setLockChecked(false);
+    checkLock();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [qrTable]);
+
+  useEffect(() => {
+    if (qrTable && !blockedByTable && (tableName || member)) {
+      setActiveTable(qrTable);
+    }
+  }, [qrTable, blockedByTable, tableName, member]);
+
+  // Once staff/admin close this table's bill, bounce the customer straight
+  // back to the home page — the table is done, and they must scan again to
+  // start a new one. Only arms once the table has actually been seen
+  // "occupied" during this visit, so it never fires before the first order.
+  const wasTableOccupiedRef = useRef(false);
+
+  useEffect(() => {
+    if (!qrTable) {
+      wasTableOccupiedRef.current = false;
+      return undefined;
+    }
+
+    let active = true;
+
+    const checkClosed = async () => {
+      try {
+        const availability = await listTableAvailability();
+        if (!active) return;
+
+        const isOccupied = availability.some(
+          (table) => table.label === qrTable && table.status === 'occupied'
+        );
+
+        if (isOccupied) {
+          wasTableOccupiedRef.current = true;
+        } else if (wasTableOccupiedRef.current) {
+          wasTableOccupiedRef.current = false;
+          clearTableName(qrTable);
+          clearActiveTable();
+          toast.info('โต๊ะนี้ปิดบิลแล้ว ขอบคุณที่ใช้บริการ — สแกน QR ใหม่เพื่อสั่งรอบถัดไป');
+          router.replace('/');
+        }
+      } catch (error) {
+        console.error(error);
+      }
+    };
+
+    checkClosed();
+    const interval = setInterval(checkClosed, 6000);
+    return () => {
+      active = false;
+      clearInterval(interval);
+    };
+  }, [qrTable, router]);
+
+  // Lets a link/button (e.g. the "ดูรายการ" tile on the home view) land
+  // straight on "รายการที่สั่ง" via `?table=X&view=orders` instead of the menu.
+  useEffect(() => {
+    if (qrTable && searchParams.get('view') === 'orders') {
+      setView('orders');
+    }
+  }, [qrTable, searchParams]);
+
+  // On the takeaway/home view, if this device already has a table open, the
+  // "สแกน QR" tile should take them straight back to it instead of opening
+  // the scanner (which would just get blocked by the lock above anyway).
+  const [homeActiveTable, setHomeActiveTable] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!qrTable) {
+      setHomeActiveTable(getActiveTable());
+    }
   }, [qrTable]);
 
   const cartLines: CartLine[] = useMemo(
@@ -115,8 +248,18 @@ export function OrderView({ items, categories, bestSellers, tables, shop }: Prop
   const visibleItems = items.filter((item) => item.category === activeCategory);
 
   const effectiveCustomer: CustomerInfo = qrTable
-    ? { ...customer, name: tableName ?? '', orderType: 'dine-in', tableNumber: qrTable }
-    : customer;
+    ? {
+        ...customer,
+        name: member?.displayName || tableName || '',
+        orderType: 'dine-in',
+        tableNumber: qrTable,
+      }
+    : {
+        ...customer,
+        name: member?.displayName || customer.name,
+        orderType: 'takeaway',
+        tableNumber: '',
+      };
 
   const handleAdd = (id: string) => {
     if (!shop.isOpen) {
@@ -190,6 +333,21 @@ export function OrderView({ items, categories, bestSellers, tables, shop }: Prop
     router.push(`/?table=${encodeURIComponent(label)}`);
   };
 
+  const handleMemberLogout = async () => {
+    await logoutMemberAction();
+    window.location.reload();
+  };
+
+  const handleShowHistory = async () => {
+    setShowHistory(true);
+    setHistoryLoading(true);
+    try {
+      setHistoryOrders(await getMyOrderHistory());
+    } finally {
+      setHistoryLoading(false);
+    }
+  };
+
   const handleConfirm = async () => {
     setSubmitting(true);
     try {
@@ -219,22 +377,6 @@ export function OrderView({ items, categories, bestSellers, tables, shop }: Prop
         toast.success(`สั่งอาหารสำเร็จ! ออเดอร์ ${result.order.orderNumber}`);
         setView('orders');
       } else {
-        addOrderToHistory({
-          orderNumber: result.order.orderNumber,
-          orderTime: result.order.createdAt,
-          orderType: result.order.orderType,
-          tableNumber: result.order.tableNumber,
-          total: result.order.total,
-          items: cartLines.map((line) => ({
-            name: line.customization
-              ? `${line.item.name} (${line.item.description})`
-              : line.item.name,
-            emoji: line.item.emoji,
-            price: line.item.price,
-            quantity: line.quantity,
-          })),
-        });
-
         setConfirmedOrder({
           orderNumber: result.order.orderNumber,
           orderTime: new Date(result.order.createdAt),
@@ -256,11 +398,20 @@ export function OrderView({ items, categories, bestSellers, tables, shop }: Prop
     setActiveCategory(categories[0]?.value ?? '');
   };
 
-  if (!nameChecked) {
+  if (!nameChecked || !lockChecked) {
     return null;
   }
 
-  if (qrTable && !tableName) {
+  if (qrTable && blockedByTable) {
+    return (
+      <TableLockedNotice
+        activeTable={blockedByTable}
+        onGoToActiveTable={() => router.push(`/?table=${encodeURIComponent(blockedByTable)}`)}
+      />
+    );
+  }
+
+  if (qrTable && !tableName && !member) {
     return <TableNameGate table={qrTable} shopName={shop.name} onSubmit={handleNameSubmit} />;
   }
 
@@ -277,8 +428,14 @@ export function OrderView({ items, categories, bestSellers, tables, shop }: Prop
     );
   }
 
-  if (showHistory) {
-    return <OrderHistoryPanel orders={getOrderHistory()} onBack={() => setShowHistory(false)} />;
+  if (showHistory && member) {
+    return (
+      <OrderHistoryPanel
+        orders={historyOrders}
+        loading={historyLoading}
+        onBack={() => setShowHistory(false)}
+      />
+    );
   }
 
   return (
@@ -297,7 +454,7 @@ export function OrderView({ items, categories, bestSellers, tables, shop }: Prop
           overflow: 'hidden',
           px: 2.5,
           pt: 3,
-          pb: qrTable ? 0 : 5,
+          pb: qrTable ? 2.5 : 5,
           color: 'common.white',
           background: 'linear-gradient(145deg, #721111 0%, #A91D1D 55%, #C12C22 100%)',
         }}
@@ -324,7 +481,6 @@ export function OrderView({ items, categories, bestSellers, tables, shop }: Prop
             bgcolor: 'rgba(255,213,79,0.10)',
           }}
         />
-
         <Stack
           direction="row"
           alignItems="center"
@@ -364,57 +520,123 @@ export function OrderView({ items, categories, bestSellers, tables, shop }: Prop
             </Box>
           </Stack>
 
-          {!qrTable && (
-            <IconButton
-              onClick={() => setShowHistory(true)}
-              sx={{
-                color: 'common.white',
-                bgcolor: 'rgba(255,255,255,0.12)',
-                '&:hover': { bgcolor: 'rgba(255,255,255,0.20)' },
-              }}
-              aria-label="ประวัติการสั่งซื้อ"
-            >
-              <RiBookOpenLine />
-            </IconButton>
-          )}
+          <Stack direction="row" spacing={1}>
+            {shop.loyalty.enabled && (
+              <IconButton
+                onClick={() => router.push('/stars')}
+                sx={{
+                  color: 'common.white',
+                  bgcolor: 'rgba(255,255,255,0.12)',
+                  '&:hover': { bgcolor: 'rgba(255,255,255,0.20)' },
+                }}
+                aria-label="สะสมดาว"
+              >
+                <Iconify icon={'solar:star-bold' as IconifyName} width={22} />
+              </IconButton>
+            )}
+            {!qrTable && member && (
+              <IconButton
+                onClick={handleShowHistory}
+                sx={{
+                  color: 'common.white',
+                  bgcolor: 'rgba(255,255,255,0.12)',
+                  '&:hover': { bgcolor: 'rgba(255,255,255,0.20)' },
+                }}
+                aria-label="ประวัติการสั่งซื้อ"
+              >
+                <RiBookOpenLine />
+              </IconButton>
+            )}
+          </Stack>
         </Stack>
 
-        <Typography
-          variant="body2"
-          sx={{ mt: 2, position: 'relative', opacity: 0.82, lineHeight: 1.6 }}
-        >
-          {shop.address}
-        </Typography>
+        {member && !qrTable && (
+          <Stack
+            direction="row"
+            alignItems="center"
+            justifyContent="space-between"
+            spacing={1}
+            sx={{
+              mt: 1.5,
+              p: 1,
+              position: 'relative',
+              borderRadius: 2,
+              bgcolor: 'rgba(255,255,255,0.12)',
+            }}
+          >
+            <Stack direction="row" alignItems="center" spacing={0.75} sx={{ minWidth: 0 }}>
+              <Iconify icon={'solar:user-circle-bold' as IconifyName} width={18} />
+              <Typography variant="caption" sx={{ fontWeight: 700 }} noWrap>
+                {member.displayName}
+              </Typography>
+              <Chip
+                size="small"
+                label={`⭐ ${member.starsBalance} ดาว`}
+                sx={{
+                  height: 20,
+                  color: 'common.white',
+                  bgcolor: 'rgba(255,255,255,0.18)',
+                  '& .MuiChip-label': { px: 0.75, fontSize: 11, fontWeight: 700 },
+                }}
+              />
+            </Stack>
+            <Button
+              size="small"
+              onClick={handleMemberLogout}
+              sx={{ flexShrink: 0, minWidth: 0, px: 1, color: 'rgba(255,255,255,0.85)' }}
+            >
+              ออกจากระบบ
+            </Button>
+          </Stack>
+        )}
 
         {qrTable && (
           <Stack
             direction="row"
             alignItems="center"
+            justifyContent="space-between"
             spacing={1}
             sx={{ mt: 1.25, position: 'relative' }}
           >
-            <Box sx={{ width: 7, height: 7, borderRadius: '50%', bgcolor: 'secondary.main' }} />
-            <Typography variant="body2" sx={{ opacity: 0.9 }}>
-              โต๊ะ {qrTable} · สวัสดีคุณ {tableName}
-            </Typography>
-          </Stack>
-        )}
+            <Stack direction="row" alignItems="center" spacing={1} sx={{ minWidth: 0 }}>
+              <Box
+                sx={{
+                  width: 7,
+                  height: 7,
+                  borderRadius: '50%',
+                  bgcolor: 'secondary.main',
+                  flexShrink: 0,
+                }}
+              />
+              <Typography variant="body2" sx={{ opacity: 0.9 }} noWrap>
+                โต๊ะ {qrTable} · สวัสดีคุณ {member?.displayName || tableName}
+              </Typography>
+            </Stack>
 
-        {qrTable && (
-          <Tabs
-            value={view}
-            onChange={(_, next) => setView(next)}
-            textColor="inherit"
-            sx={{
-              mt: 2,
-              minHeight: 36,
-              position: 'relative',
-              '& .MuiTabs-indicator': { bgcolor: 'secondary.main' },
-            }}
-          >
-            <Tab value="menu" label="เมนูอาหาร" sx={{ minHeight: 36, opacity: 1 }} />
-            <Tab value="orders" label="รายการที่สั่ง" sx={{ minHeight: 36, opacity: 1 }} />
-          </Tabs>
+            <Button
+              size="small"
+              disableRipple
+              onClick={() => setView(view === 'orders' ? 'menu' : 'orders')}
+              startIcon={
+                <Iconify
+                  icon={
+                    (view === 'orders'
+                      ? 'custom:fast-food-fill'
+                      : 'solar:bill-list-bold-duotone') as IconifyName
+                  }
+                  width={16}
+                />
+              }
+              sx={{
+                flexShrink: 0,
+                color: 'common.white',
+                bgcolor: 'rgba(255,255,255,0.14)',
+                '&:hover': { bgcolor: 'rgba(255,255,255,0.22)' },
+              }}
+            >
+              {view === 'orders' ? 'เมนูอาหาร' : 'รายการที่สั่ง'}
+            </Button>
+          </Stack>
         )}
       </Box>
 
@@ -432,7 +654,13 @@ export function OrderView({ items, categories, bestSellers, tables, shop }: Prop
             }}
           >
             <ButtonBase
-              onClick={() => setScannerOpen(true)}
+              onClick={() => {
+                if (homeActiveTable) {
+                  router.push(`/?table=${encodeURIComponent(homeActiveTable)}&view=orders`);
+                } else {
+                  setScannerOpen(true);
+                }
+              }}
               sx={{ flex: 1, p: 1.75, textAlign: 'left', justifyContent: 'flex-start' }}
             >
               <Stack direction="row" spacing={1.25} alignItems="center">
@@ -448,12 +676,21 @@ export function OrderView({ items, categories, bestSellers, tables, shop }: Prop
                     bgcolor: 'primary.lighter',
                   }}
                 >
-                  <Iconify icon={'solar:qr-code-bold' as IconifyName} width={22} />
+                  <Iconify
+                    icon={
+                      (homeActiveTable
+                        ? 'solar:bill-list-bold-duotone'
+                        : 'solar:qr-code-bold') as IconifyName
+                    }
+                    width={22}
+                  />
                 </Box>
                 <Box>
-                  <Typography variant="subtitle2">สแกน QR</Typography>
+                  <Typography variant="subtitle2">
+                    {homeActiveTable ? 'ดูรายการ' : 'สแกน QR'}
+                  </Typography>
                   <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-                    สั่งที่โต๊ะ
+                    {homeActiveTable ? `โต๊ะ ${homeActiveTable}` : 'สั่งที่โต๊ะ'}
                   </Typography>
                 </Box>
               </Stack>
@@ -544,6 +781,12 @@ export function OrderView({ items, categories, bestSellers, tables, shop }: Prop
         <TableOrdersPanel table={qrTable} currentName={tableName ?? ''} />
       ) : (
         <>
+          <ActiveOrderStatus
+            table={qrTable}
+            memberId={member?.id ?? null}
+            onViewOrders={qrTable ? () => setView('orders') : undefined}
+          />
+
           <BestSellerStrip items={bestSellers} quantities={quantities} onAdd={handleAdd} />
 
           {shop.customOrder.enabled && shop.customOrder.steps.length > 0 && (
@@ -798,12 +1041,16 @@ export function OrderView({ items, categories, bestSellers, tables, shop }: Prop
         total={totalPrice}
         submitting={submitting}
         qrMode={!!qrTable}
-        tables={tables}
+        member={member}
         shopOpen={shop.isOpen}
         onAdd={handleAdd}
         onRemove={handleRemove}
         customer={effectiveCustomer}
         onChangeCustomer={handleChangeCustomer}
+        onScanTable={() => {
+          setCartOpen(false);
+          setScannerOpen(true);
+        }}
         onConfirm={handleConfirm}
       />
 

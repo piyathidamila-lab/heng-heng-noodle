@@ -1,6 +1,6 @@
 'use client';
 
-import type { OrderStatus, TableOrderSummary } from 'src/lib/order-service';
+import type { TableOrderSummary } from 'src/lib/order-service';
 
 import { useMemo, useState, useEffect } from 'react';
 
@@ -13,27 +13,14 @@ import CircularProgress from '@mui/material/CircularProgress';
 
 import { fTime } from 'src/utils/format-time';
 
+import { Iconify } from 'src/components/iconify';
+
 import { getTableOrders } from '../order-actions';
+import { OrderStatusBadge } from './order-status-badge';
 
 // ----------------------------------------------------------------------
 
 const POLL_INTERVAL_MS = 6000;
-
-const STATUS_LABEL: Record<OrderStatus, string> = {
-  pending: 'รอดำเนินการ',
-  preparing: 'กำลังทำ',
-  served: 'เสิร์ฟแล้ว',
-  completed: 'เสร็จสิ้น',
-  cancelled: 'ยกเลิก',
-};
-
-const STATUS_COLOR: Record<OrderStatus, 'warning' | 'info' | 'success' | 'default' | 'error'> = {
-  pending: 'warning',
-  preparing: 'info',
-  served: 'success',
-  completed: 'default',
-  cancelled: 'error',
-};
 
 type Props = {
   table: string;
@@ -111,6 +98,53 @@ export function TableOrdersPanel({ table, currentName }: Props) {
         />
       </Stack>
 
+      {orders.length > 0 && (
+        <Stack
+          direction="row"
+          alignItems="center"
+          justifyContent="space-between"
+          spacing={1.5}
+          sx={{
+            p: 1.75,
+            borderRadius: 2.5,
+            border: '1px solid #F1CB79',
+            bgcolor: '#FFF9EA',
+          }}
+        >
+          <Stack direction="row" alignItems="center" spacing={1.25} sx={{ minWidth: 0 }}>
+            <Box
+              sx={{
+                width: 42,
+                height: 42,
+                flexShrink: 0,
+                display: 'grid',
+                placeItems: 'center',
+                borderRadius: 2,
+                color: '#96650A',
+                bgcolor: '#FFE9AD',
+              }}
+            >
+              <Iconify icon="solar:wad-of-money-bold" width={24} />
+            </Box>
+            <Box sx={{ minWidth: 0 }}>
+              <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
+                สถานะชำระเงิน
+              </Typography>
+              <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+                ชำระรวมทั้งโต๊ะได้ที่เคาน์เตอร์
+              </Typography>
+            </Box>
+          </Stack>
+          <Chip
+            size="small"
+            label="รอชำระ"
+            color="warning"
+            icon={<Iconify icon="solar:clock-circle-bold" width={16} />}
+            sx={{ flexShrink: 0, fontWeight: 700 }}
+          />
+        </Stack>
+      )}
+
       {visibleOrders.length === 0 ? (
         <Typography sx={{ color: 'text.secondary', textAlign: 'center', py: 6 }}>
           {onlyMine ? 'คุณยังไม่ได้สั่งอาหาร' : 'ยังไม่มีใครสั่งอาหารที่โต๊ะนี้'}
@@ -147,11 +181,7 @@ export function TableOrdersPanel({ table, currentName }: Props) {
                         <Typography variant="caption" sx={{ color: 'text.secondary' }}>
                           {order.orderNumber} · {fTime(order.createdAt)}
                         </Typography>
-                        <Chip
-                          size="small"
-                          label={STATUS_LABEL[order.status]}
-                          color={STATUS_COLOR[order.status]}
-                        />
+                        <OrderStatusBadge status={order.status} />
                       </Stack>
 
                       {order.items.map((item) => (
