@@ -1,16 +1,26 @@
 'use client';
 
-import type { ShopSettings } from 'src/lib/shop-settings-service';
+import type {
+  DayHours,
+  WeekdayKey,
+  ShopSettings,
+  SpecialClosure,
+} from 'src/lib/shop-settings-service';
 
 import { useState } from 'react';
 
 import Box from '@mui/material/Box';
+import Grid from '@mui/material/Grid';
 import Stack from '@mui/material/Stack';
 import Switch from '@mui/material/Switch';
 import Button from '@mui/material/Button';
 import Divider from '@mui/material/Divider';
 import TextField from '@mui/material/TextField';
+import IconButton from '@mui/material/IconButton';
 import Typography from '@mui/material/Typography';
+import FormControlLabel from '@mui/material/FormControlLabel';
+
+import { WEEKDAY_LABELS } from 'src/utils/business-hours';
 
 import { toast } from 'src/components/snackbar';
 import { Iconify } from 'src/components/iconify';
@@ -18,6 +28,8 @@ import { Iconify } from 'src/components/iconify';
 import { updateShopSettings } from './settings-actions';
 
 // ----------------------------------------------------------------------
+
+const DISPLAY_ORDER: WeekdayKey[] = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
 
 type Props = {
   initialSettings: ShopSettings;
@@ -29,6 +41,36 @@ export function AdminSettingsView({ initialSettings }: Props) {
 
   const handleChange = (patch: Partial<ShopSettings>) => {
     setForm((prev) => ({ ...prev, ...patch }));
+  };
+
+  const handleDayChange = (day: WeekdayKey, patch: Partial<DayHours>) => {
+    setForm((prev) => ({
+      ...prev,
+      businessHours: { ...prev.businessHours, [day]: { ...prev.businessHours[day], ...patch } },
+    }));
+  };
+
+  const handleAddSpecialClosure = () => {
+    handleChange({
+      specialClosures: [
+        ...form.specialClosures,
+        { id: `closure-${Date.now()}`, date: '', label: 'วันพระ' },
+      ],
+    });
+  };
+
+  const handleSpecialClosureChange = (id: string, patch: Partial<SpecialClosure>) => {
+    handleChange({
+      specialClosures: form.specialClosures.map((item) =>
+        item.id === id ? { ...item, ...patch } : item
+      ),
+    });
+  };
+
+  const handleRemoveSpecialClosure = (id: string) => {
+    handleChange({
+      specialClosures: form.specialClosures.filter((item) => item.id !== id),
+    });
   };
 
   const handleSave = async () => {
@@ -82,22 +124,174 @@ export function AdminSettingsView({ initialSettings }: Props) {
           fullWidth
         />
 
-        <Stack direction="row" spacing={2}>
-          <TextField
-            label="เวลาเปิดร้าน"
-            placeholder="เช่น 08:00"
-            value={form.openTime}
-            onChange={(e) => handleChange({ openTime: e.target.value })}
-            fullWidth
-          />
-          <TextField
-            label="เวลาปิดร้าน"
-            placeholder="เช่น 20:00"
-            value={form.closeTime}
-            onChange={(e) => handleChange({ closeTime: e.target.value })}
-            fullWidth
-          />
-        </Stack>
+        <Divider sx={{ my: 1 }} />
+
+        <Box>
+          <Typography variant="h6">เวลาทำการ</Typography>
+          <Typography variant="body2" sx={{ color: 'text.secondary', mb: 2 }}>
+            ลูกค้าจะสั่งอาหารไม่ได้นอกช่วงเวลาที่ตั้งไว้ของแต่ละวัน
+          </Typography>
+
+          <Grid container spacing={1.5}>
+            {DISPLAY_ORDER.map((day) => {
+              const dayHours = form.businessHours[day];
+
+              return (
+                <Grid size={{ xs: 6 }} key={day}>
+                  <Stack
+                    direction="row"
+                    alignItems="center"
+                    spacing={2}
+                    sx={{
+                      p: 1.5,
+                      borderRadius: 2,
+                      border: '1px solid',
+                      borderColor: 'grey.200',
+                    }}
+                  >
+                    <Typography variant="subtitle2" sx={{ width: 88, flexShrink: 0 }}>
+                      {WEEKDAY_LABELS[day]}
+                    </Typography>
+
+                    <FormControlLabel
+                      sx={{ width: 96, flexShrink: 0, mr: 0 }}
+                      control={
+                        <Switch
+                          size="small"
+                          checked={!dayHours.closed}
+                          onChange={(e) => handleDayChange(day, { closed: !e.target.checked })}
+                          inputProps={{ 'aria-label': `เปิด-ปิดร้านวัน${WEEKDAY_LABELS[day]}` }}
+                        />
+                      }
+                      label={dayHours.closed ? 'หยุด' : 'เปิด'}
+                    />
+
+                    <TextField
+                      type="time"
+                      size="small"
+                      value={dayHours.open}
+                      onChange={(e) => handleDayChange(day, { open: e.target.value })}
+                      disabled={dayHours.closed}
+                      sx={{ flex: 1 }}
+                    />
+                    <Typography sx={{ color: 'text.secondary' }}>–</Typography>
+                    <TextField
+                      type="time"
+                      size="small"
+                      value={dayHours.close}
+                      onChange={(e) => handleDayChange(day, { close: e.target.value })}
+                      disabled={dayHours.closed}
+                      sx={{ flex: 1 }}
+                    />
+                  </Stack>
+                </Grid>
+              );
+            })}
+          </Grid>
+        </Box>
+
+        <Divider sx={{ my: 1 }} />
+
+        <Box>
+          <Stack
+            direction={{ xs: 'column', sm: 'row' }}
+            alignItems={{ xs: 'flex-start', sm: 'center' }}
+            justifyContent="space-between"
+            spacing={1.5}
+            sx={{ mb: 2 }}
+          >
+            <Box>
+              <Typography variant="h6">วันหยุดพิเศษ</Typography>
+              <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+                เพิ่มวันที่ร้านหยุดนอกตารางประจำ เช่น วันพระ เทศกาล หรือวันหยุดส่วนตัว
+              </Typography>
+            </Box>
+            <Button
+              variant="outlined"
+              startIcon={<Iconify icon="solar:add-circle-bold" width={19} />}
+              onClick={handleAddSpecialClosure}
+              sx={{ flexShrink: 0 }}
+            >
+              เพิ่มวันหยุด
+            </Button>
+          </Stack>
+
+          {form.specialClosures.length === 0 ? (
+            <Stack
+              alignItems="center"
+              spacing={1}
+              sx={{
+                px: 2,
+                py: 3.5,
+                borderRadius: 2.5,
+                border: '1px dashed',
+                borderColor: 'grey.300',
+                bgcolor: 'grey.50',
+                textAlign: 'center',
+              }}
+            >
+              <Iconify icon="solar:calendar-date-bold" width={30} sx={{ color: 'text.disabled' }} />
+              <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+                ยังไม่มีวันหยุดพิเศษ กด “เพิ่มวันหยุด” เพื่อกำหนดล่วงหน้า
+              </Typography>
+            </Stack>
+          ) : (
+            <Stack spacing={1.25}>
+              {form.specialClosures.map((closure) => (
+                <Stack
+                  key={closure.id}
+                  direction={{ xs: 'column', sm: 'row' }}
+                  alignItems={{ xs: 'stretch', sm: 'center' }}
+                  spacing={1.25}
+                  sx={{
+                    p: 1.5,
+                    borderRadius: 2.5,
+                    border: '1px solid',
+                    borderColor: 'grey.200',
+                    bgcolor: 'common.white',
+                  }}
+                >
+                  <TextField
+                    type="date"
+                    label="วันที่หยุด"
+                    size="small"
+                    value={closure.date}
+                    onChange={(event) =>
+                      handleSpecialClosureChange(closure.id, { date: event.target.value })
+                    }
+                    slotProps={{ inputLabel: { shrink: true } }}
+                    sx={{ width: { xs: 1, sm: 190 }, flexShrink: 0 }}
+                  />
+                  <TextField
+                    label="เหตุผล"
+                    placeholder="เช่น วันพระ"
+                    size="small"
+                    value={closure.label}
+                    onChange={(event) =>
+                      handleSpecialClosureChange(closure.id, { label: event.target.value })
+                    }
+                    fullWidth
+                  />
+                  <IconButton
+                    color="error"
+                    onClick={() => handleRemoveSpecialClosure(closure.id)}
+                    aria-label={`ลบวันหยุด ${closure.label || closure.date}`}
+                    sx={{ alignSelf: { xs: 'flex-end', sm: 'center' } }}
+                  >
+                    <Iconify icon="solar:trash-bin-trash-bold" width={20} />
+                  </IconButton>
+                </Stack>
+              ))}
+            </Stack>
+          )}
+
+          <Typography
+            variant="caption"
+            sx={{ display: 'block', mt: 1.25, color: 'text.secondary' }}
+          >
+            เมื่อถึงวันที่กำหนด ระบบจะปิดรับออเดอร์อัตโนมัติ โดยไม่เปลี่ยนปุ่มเปิด–ปิดร้านหลัก
+          </Typography>
+        </Box>
 
         <Divider sx={{ my: 1 }} />
 

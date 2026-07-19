@@ -42,7 +42,10 @@ export default async function Layout({ children }: Props) {
         header: {
           slots: {
             rightArea: (
-              <AdminHeaderActions displayName={user.displayName} initialIsOpen={settings.isOpen} />
+              <AdminHeaderActions
+                displayName={user.displayName}
+                initialIsOpen={settings.manuallyOpen}
+              />
             ),
           },
         },

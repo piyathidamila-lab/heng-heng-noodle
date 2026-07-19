@@ -32,7 +32,6 @@ import { CartSheet } from '../components/cart-sheet';
 import { MenuItemCard } from '../components/menu-item-card';
 import { TableNameGate } from '../components/table-name-gate';
 import { OrderConfirmed } from '../components/order-confirmed';
-import { placeOrder, getMyOrderHistory } from '../order-actions';
 import { QrScannerDialog } from '../components/qr-scanner-dialog';
 import { BestSellerStrip } from '../components/best-seller-strip';
 import { TableOrdersPanel } from '../components/table-orders-panel';
@@ -41,6 +40,7 @@ import { CustomOrderDialog } from '../components/custom-order-dialog';
 import { OrderHistoryPanel } from '../components/order-history-panel';
 import { TableLockedNotice } from '../components/table-locked-notice';
 import { listTableAvailability } from '../table-availability-actions';
+import { placeOrder, getTableOrders, getMyOrderHistory } from '../order-actions';
 import {
   saveTableName,
   setActiveTable,
@@ -105,6 +105,7 @@ export function OrderView({ items, categories, bestSellers, shop, member }: Prop
   const [submitting, setSubmitting] = useState(false);
   const [historyOrders, setHistoryOrders] = useState<MemberOrderSummary[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
+  const [tableHasOrders, setTableHasOrders] = useState<boolean | null>(null);
 
   useLayoutEffect(() => {
     if (qrTable) {
@@ -213,6 +214,34 @@ export function OrderView({ items, categories, bestSellers, shop, member }: Prop
     };
   }, [qrTable, router]);
 
+  // Only lets the customer leave/reset their table session while nobody at
+  // the table has ordered yet — once an order exists, leaving would abandon
+  // it with no way to track it back.
+  useEffect(() => {
+    if (!qrTable) {
+      setTableHasOrders(null);
+      return undefined;
+    }
+
+    let active = true;
+
+    const checkOrders = async () => {
+      try {
+        const orders = await getTableOrders(qrTable);
+        if (active) setTableHasOrders(orders.length > 0);
+      } catch (error) {
+        console.error(error);
+      }
+    };
+
+    checkOrders();
+    const interval = setInterval(checkOrders, 6000);
+    return () => {
+      active = false;
+      clearInterval(interval);
+    };
+  }, [qrTable]);
+
   // Lets a link/button (e.g. the "ดูรายการ" tile on the home view) land
   // straight on "รายการที่สั่ง" via `?table=X&view=orders` instead of the menu.
   useEffect(() => {
@@ -247,6 +276,8 @@ export function OrderView({ items, categories, bestSellers, shop, member }: Prop
 
   const visibleItems = items.filter((item) => item.category === activeCategory);
 
+  const canLeaveTable = !!qrTable && tableHasOrders === false;
+
   const effectiveCustomer: CustomerInfo = qrTable
     ? {
         ...customer,
@@ -263,7 +294,11 @@ export function OrderView({ items, categories, bestSellers, shop, member }: Prop
 
   const handleAdd = (id: string) => {
     if (!shop.isOpen) {
-      toast.error('ร้านปิดอยู่ขณะนี้ ไม่สามารถสั่งอาหารได้');
+      toast.error(
+        shop.closureReason
+          ? `วันนี้ร้านหยุดเนื่องจาก ${shop.closureReason}`
+          : 'ร้านปิดอยู่ขณะนี้ ไม่สามารถสั่งอาหารได้'
+      );
       return;
     }
     if (id.startsWith('custom-')) {
@@ -294,7 +329,11 @@ export function OrderView({ items, categories, bestSellers, shop, member }: Prop
     price: number
   ) => {
     if (!shop.isOpen) {
-      toast.error('ร้านปิดอยู่ขณะนี้ ไม่สามารถสั่งอาหารได้');
+      toast.error(
+        shop.closureReason
+          ? `วันนี้ร้านหยุดเนื่องจาก ${shop.closureReason}`
+          : 'ร้านปิดอยู่ขณะนี้ ไม่สามารถสั่งอาหารได้'
+      );
       return;
     }
     const id = `custom-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -331,6 +370,14 @@ export function OrderView({ items, categories, bestSellers, shop, member }: Prop
   const handleScanTable = (label: string) => {
     setScannerOpen(false);
     router.push(`/?table=${encodeURIComponent(label)}`);
+  };
+
+  const handleLeaveTable = () => {
+    if (!qrTable) return;
+    clearTableName(qrTable);
+    clearActiveTable();
+    setTableName(null);
+    router.push('/');
   };
 
   const handleMemberLogout = async () => {
@@ -444,7 +491,7 @@ export function OrderView({ items, categories, bestSellers, shop, member }: Prop
         flex: 1,
         display: 'flex',
         flexDirection: 'column',
-        pb: totalQuantity ? 11 : 3,
+        pb: totalQuantity ? 'calc(104px + env(safe-area-inset-bottom, 0px))' : 3,
         bgcolor: '#FBF8F4',
       }}
     >
@@ -613,29 +660,47 @@ export function OrderView({ items, categories, bestSellers, shop, member }: Prop
               </Typography>
             </Stack>
 
-            <Button
-              size="small"
-              disableRipple
-              onClick={() => setView(view === 'orders' ? 'menu' : 'orders')}
-              startIcon={
-                <Iconify
-                  icon={
-                    (view === 'orders'
-                      ? 'custom:fast-food-fill'
-                      : 'solar:bill-list-bold-duotone') as IconifyName
+            <Stack direction="row" spacing={1} sx={{ flexShrink: 0 }}>
+              {canLeaveTable && (
+                <Button
+                  size="small"
+                  disableRipple
+                  onClick={handleLeaveTable}
+                  startIcon={
+                    <Iconify icon={'ic:round-power-settings-new' as IconifyName} width={16} />
                   }
-                  width={16}
-                />
-              }
-              sx={{
-                flexShrink: 0,
-                color: 'common.white',
-                bgcolor: 'rgba(255,255,255,0.14)',
-                '&:hover': { bgcolor: 'rgba(255,255,255,0.22)' },
-              }}
-            >
-              {view === 'orders' ? 'เมนูอาหาร' : 'รายการที่สั่ง'}
-            </Button>
+                  sx={{
+                    color: 'rgba(255,255,255,0.85)',
+                    bgcolor: 'rgba(255,255,255,0.10)',
+                    '&:hover': { bgcolor: 'rgba(255,255,255,0.18)' },
+                  }}
+                >
+                  ออกจากโต๊ะ
+                </Button>
+              )}
+              <Button
+                size="small"
+                disableRipple
+                onClick={() => setView(view === 'orders' ? 'menu' : 'orders')}
+                startIcon={
+                  <Iconify
+                    icon={
+                      (view === 'orders'
+                        ? 'custom:fast-food-fill'
+                        : 'solar:bill-list-bold-duotone') as IconifyName
+                    }
+                    width={16}
+                  />
+                }
+                sx={{
+                  color: 'common.white',
+                  bgcolor: 'rgba(255,255,255,0.14)',
+                  '&:hover': { bgcolor: 'rgba(255,255,255,0.22)' },
+                }}
+              >
+                {view === 'orders' ? 'เมนูอาหาร' : 'รายการที่สั่ง'}
+              </Button>
+            </Stack>
           </Stack>
         )}
       </Box>
@@ -748,7 +813,9 @@ export function OrderView({ items, categories, bestSellers, shop, member }: Prop
             sx={{ flexShrink: 0, mt: 0.1 }}
           />
           <Typography variant="body2">
-            ร้านปิดอยู่ในขณะนี้ ดูเมนูได้ตามปกติ แต่ยังไม่สามารถสั่งอาหารได้
+            {shop.closureReason
+              ? `วันนี้ร้านหยุดเนื่องจาก ${shop.closureReason} ดูเมนูได้ตามปกติ แต่ยังไม่สามารถสั่งอาหารได้`
+              : 'ร้านปิดอยู่ในขณะนี้ ดูเมนูได้ตามปกติ แต่ยังไม่สามารถสั่งอาหารได้'}
           </Typography>
         </Stack>
       )}
@@ -1003,10 +1070,11 @@ export function OrderView({ items, categories, bestSellers, shop, member }: Prop
             bottom: 0,
             left: 0,
             right: 0,
+            zIndex: 10,
             display: 'flex',
             justifyContent: 'center',
             px: 2.5,
-            pb: 2.5,
+            pb: 'calc(20px + env(safe-area-inset-bottom, 0px))',
             pointerEvents: 'none',
           }}
         >

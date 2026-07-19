@@ -70,7 +70,10 @@ async function getOrCreateOpenSession(tableNumber: string, customerId?: string):
     // First logged-in member to order in this session "claims" it for star
     // awarding — later orders (guest or a different member) don't override it.
     if (customerId && !existing.customer_id) {
-      await supabase.from('table_sessions').update({ customer_id: customerId }).eq('id', existing.id);
+      await supabase
+        .from('table_sessions')
+        .update({ customer_id: customerId })
+        .eq('id', existing.id);
     }
     return existing.id;
   }
@@ -106,7 +109,11 @@ async function getOrCreateOpenSession(tableNumber: string, customerId?: string):
 export async function createOrderRecord(input: CreateOrderInput): Promise<OrderRecord> {
   const settings = await getShopSettings();
   if (!settings.isOpen) {
-    throw new OrderValidationError('ร้านปิดอยู่ในขณะนี้ ไม่สามารถสั่งอาหารได้');
+    throw new OrderValidationError(
+      settings.closureReason
+        ? `วันนี้ร้านหยุดเนื่องจาก ${settings.closureReason}`
+        : 'ร้านปิดอยู่ในขณะนี้ ไม่สามารถสั่งอาหารได้'
+    );
   }
 
   if (input.lines.length === 0) {
@@ -208,7 +215,7 @@ export async function createOrderRecord(input: CreateOrderInput): Promise<OrderR
       table_number: tableNumber,
       note: input.note.trim(),
       total,
-      customer_id: input.orderType === 'takeaway' ? input.customerId ?? null : null,
+      customer_id: input.orderType === 'takeaway' ? (input.customerId ?? null) : null,
     })
     .select(
       'id, seq, customer_name, customer_phone, order_type, table_number, note, status, total, created_at'
@@ -575,7 +582,10 @@ export async function closeTableSessionRecord(id: string): Promise<void> {
  * and `table_sessions` carry a denormalized table_number, so both need
  * updating to keep bills and the customer-facing table view correct.
  */
-export async function moveTableSessionRecord(sessionId: string, newTableNumber: string): Promise<void> {
+export async function moveTableSessionRecord(
+  sessionId: string,
+  newTableNumber: string
+): Promise<void> {
   const trimmed = newTableNumber.trim();
   if (!trimmed) {
     throw new OrderValidationError('กรุณาเลือกโต๊ะปลายทาง');

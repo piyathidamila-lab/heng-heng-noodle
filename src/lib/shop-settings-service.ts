@@ -1,19 +1,38 @@
+import type { DayHours, BusinessHours } from 'src/utils/business-hours';
+
+import {
+  WEEKDAY_KEYS,
+  getShopDateKey,
+  DEFAULT_DAY_HOURS,
+  DEFAULT_BUSINESS_HOURS,
+} from 'src/utils/business-hours';
+
 import { getSupabaseAdmin } from './supabase-admin';
 import { getSupabasePublic } from './supabase-public';
 
 // ----------------------------------------------------------------------
+
+export type { BusinessHours, DayHours, WeekdayKey } from 'src/utils/business-hours';
 
 export type ShopSettings = {
   name: string;
   address: string;
   phone: string;
   promptPayId: string;
-  openTime: string;
-  closeTime: string;
+  businessHours: BusinessHours;
+  specialClosures: SpecialClosure[];
   customOrder: CustomOrderConfig;
   announcement: AnnouncementConfig;
   loyalty: LoyaltyConfig;
   isOpen: boolean;
+  manuallyOpen: boolean;
+  closureReason: string;
+};
+
+export type SpecialClosure = {
+  id: string;
+  date: string;
+  label: string;
 };
 
 export type AnnouncementConfig = {
@@ -51,15 +70,15 @@ export type CustomOrderSelection = {
 export type ShopSettingsInput = ShopSettings;
 
 const SELECT_COLUMNS =
-  'name, address, phone, promptpay_id, open_time, close_time, custom_order_enabled, custom_order_title, custom_order_steps, announcement_enabled, announcement_message, loyalty_enabled, loyalty_baht_per_star, is_open';
+  'name, address, phone, promptpay_id, business_hours, special_closures, custom_order_enabled, custom_order_title, custom_order_steps, announcement_enabled, announcement_message, loyalty_enabled, loyalty_baht_per_star, is_open';
 
 type ShopSettingsRow = {
   name: string;
   address: string;
   phone: string;
   promptpay_id: string;
-  open_time: string;
-  close_time: string;
+  business_hours: unknown;
+  special_closures: unknown;
   custom_order_enabled: boolean;
   custom_order_title: string;
   custom_order_steps: unknown;
@@ -150,14 +169,65 @@ function normalizeCustomOrderSteps(value: unknown): CustomOrderStep[] {
   return steps.length > 0 ? steps : DEFAULT_CUSTOM_ORDER_STEPS;
 }
 
+function normalizeDayHours(value: unknown, fallback: DayHours): DayHours {
+  if (!value || typeof value !== 'object') return fallback;
+  const record = value as Record<string, unknown>;
+
+  const open = String(record.open ?? fallback.open).slice(0, 5);
+  const close = String(record.close ?? fallback.close).slice(0, 5);
+  const closed = typeof record.closed === 'boolean' ? record.closed : fallback.closed;
+
+  return { closed, open, close };
+}
+
+function normalizeBusinessHours(value: unknown): BusinessHours {
+  if (!value || typeof value !== 'object') return DEFAULT_BUSINESS_HOURS;
+  const record = value as Record<string, unknown>;
+
+  return WEEKDAY_KEYS.reduce(
+    (acc, key) => ({ ...acc, [key]: normalizeDayHours(record[key], DEFAULT_DAY_HOURS) }),
+    {} as BusinessHours
+  );
+}
+
+function normalizeSpecialClosures(value: unknown): SpecialClosure[] {
+  if (!Array.isArray(value)) return [];
+
+  const uniqueDates = new Set<string>();
+
+  return value
+    .slice(0, 100)
+    .map((item, index) => {
+      if (!item || typeof item !== 'object') return null;
+      const record = item as Record<string, unknown>;
+      const date = String(record.date ?? '').trim();
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || uniqueDates.has(date)) return null;
+
+      uniqueDates.add(date);
+      return {
+        id: String(record.id ?? `closure-${index + 1}`).slice(0, 80),
+        date,
+        label:
+          String(record.label ?? 'วันหยุดพิเศษ')
+            .trim()
+            .slice(0, 120) || 'วันหยุดพิเศษ',
+      };
+    })
+    .filter((item): item is SpecialClosure => item !== null)
+    .sort((a, b) => a.date.localeCompare(b.date));
+}
+
 function mapRow(row: ShopSettingsRow): ShopSettings {
+  const specialClosures = normalizeSpecialClosures(row.special_closures);
+  const todayClosure = specialClosures.find((item) => item.date === getShopDateKey());
+
   return {
     name: row.name,
     address: row.address,
     phone: row.phone,
     promptPayId: row.promptpay_id,
-    openTime: row.open_time,
-    closeTime: row.close_time,
+    businessHours: normalizeBusinessHours(row.business_hours),
+    specialClosures,
     customOrder: {
       enabled: row.custom_order_enabled,
       title: row.custom_order_title,
@@ -171,7 +241,9 @@ function mapRow(row: ShopSettingsRow): ShopSettings {
       enabled: row.loyalty_enabled,
       bahtPerStar: Number(row.loyalty_baht_per_star),
     },
-    isOpen: row.is_open,
+    isOpen: row.is_open && !todayClosure,
+    manuallyOpen: row.is_open,
+    closureReason: todayClosure?.label ?? '',
   };
 }
 
@@ -180,8 +252,8 @@ const DEFAULT_SETTINGS: ShopSettings = {
   address: 'บ้านขามเรียง มหาสารคาม',
   phone: '',
   promptPayId: '',
-  openTime: '',
-  closeTime: '',
+  businessHours: DEFAULT_BUSINESS_HOURS,
+  specialClosures: [],
   customOrder: {
     enabled: true,
     title: 'ความอร่อยเลือกเองได้',
@@ -196,6 +268,8 @@ const DEFAULT_SETTINGS: ShopSettings = {
     bahtPerStar: 100,
   },
   isOpen: true,
+  manuallyOpen: true,
+  closureReason: '',
 };
 
 /** Store info shown on the customer-facing site — safe to call from any page. */
@@ -220,8 +294,8 @@ export async function updateShopSettingsRecord(input: ShopSettingsInput): Promis
       address: input.address.trim(),
       phone: input.phone.trim(),
       promptpay_id: input.promptPayId.trim(),
-      open_time: input.openTime.trim(),
-      close_time: input.closeTime.trim(),
+      business_hours: normalizeBusinessHours(input.businessHours),
+      special_closures: normalizeSpecialClosures(input.specialClosures),
       custom_order_enabled: input.customOrder.enabled,
       custom_order_title: input.customOrder.title.trim() || 'ความอร่อยเลือกเองได้',
       custom_order_steps: normalizeCustomOrderSteps(input.customOrder.steps),
