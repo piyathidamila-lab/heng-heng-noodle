@@ -30,11 +30,26 @@ export function LoginView({ shopName }: Props) {
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        bgcolor: 'grey.100',
         px: 2,
+        py: 4,
+        backgroundImage:
+          "linear-gradient(135deg, rgba(50, 8, 7, 0.72), rgba(113, 17, 17, 0.48)), url('https://res.cloudinary.com/dkdbilwtj/image/upload/v1784440581/og-images_mkbszz.jpg')",
+        backgroundSize: 'cover',
+        backgroundPosition: 'center',
+        backgroundRepeat: 'no-repeat',
       }}
     >
-      <Card sx={{ width: 1, maxWidth: 420, p: { xs: 4, sm: 5 } }}>
+      <Card
+        sx={{
+          width: 1,
+          maxWidth: 420,
+          p: { xs: 4, sm: 5 },
+          bgcolor: 'rgba(255,255,255,0.94)',
+          backdropFilter: 'blur(10px)',
+          border: '1px solid rgba(255,255,255,0.45)',
+          boxShadow: '0 24px 64px rgba(35,8,6,0.28)',
+        }}
+      >
         <Stack spacing={0.5} sx={{ mb: 4, alignItems: 'center', textAlign: 'center' }}>
           <Logo sx={{ height: 100, width: 100 }} />
 

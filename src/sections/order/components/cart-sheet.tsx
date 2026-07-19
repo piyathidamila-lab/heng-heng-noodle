@@ -63,6 +63,8 @@ export function CartSheet({
     (customer.orderType === 'takeaway' || customer.tableNumber.trim().length > 0);
   const totalQuantity = lines.reduce((sum, line) => sum + line.quantity, 0);
 
+  console.log('qrMode', qrMode);
+
   return (
     <Drawer
       anchor="bottom"
@@ -383,14 +385,16 @@ export function CartSheet({
                   </Typography>
                 </Stack>
               ) : (
-                <TextField
-                  label="ชื่อผู้สั่ง *"
-                  placeholder="กรอกชื่อของคุณ"
-                  value={customer.name}
-                  onChange={(e) => onChangeCustomer({ name: e.target.value })}
-                  slotProps={{ input: { sx: { borderRadius: 2 } } }}
-                  fullWidth
-                />
+                <Stack>
+                  <TextField
+                    label="ชื่อผู้สั่ง *"
+                    placeholder="กรอกชื่อของคุณ"
+                    value={customer.name}
+                    onChange={(e) => onChangeCustomer({ name: e.target.value })}
+                    slotProps={{ input: { sx: { borderRadius: 2 } } }}
+                    fullWidth
+                  />
+                </Stack>
               )}
 
               {!qrMode && (
@@ -416,7 +420,12 @@ export function CartSheet({
                       ต้องการทานที่ร้าน? สแกน QR โค้ดที่โต๊ะของคุณ
                     </Typography>
                   </Box>
-                  <Button size="small" variant="outlined" onClick={onScanTable} sx={{ flexShrink: 0 }}>
+                  <Button
+                    size="small"
+                    variant="outlined"
+                    onClick={onScanTable}
+                    sx={{ flexShrink: 0 }}
+                  >
                     สแกน QR
                   </Button>
                 </Stack>

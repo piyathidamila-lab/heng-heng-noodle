@@ -78,20 +78,22 @@ const contentStyles = (theme: Theme): CSSObject => ({
 });
 
 const actionsStyles = (theme: Theme): CSSObject => ({
-  [`& .${snackbarClasses.actionButton}, .${snackbarClasses.closeButton}`]: {
-    color: 'inherit',
-    cursor: 'pointer',
-    alignItems: 'center',
-    display: 'inline-flex',
-    justifyContent: 'center',
-    backgroundColor: 'transparent',
-    border: `solid 1px ${varAlpha('currentColor', 0.16)}`,
-    transition: theme.transitions.create(['background-color', 'border-color']),
-    '&:hover': {
-      borderColor: varAlpha('currentColor', 0.24),
-      backgroundColor: varAlpha('currentColor', 0.08),
+  [`& .${snackbarClasses.actionButton}, .${snackbarClasses.cancelButton}, .${snackbarClasses.closeButton}`]:
+    {
+      color: 'inherit',
+      cursor: 'pointer',
+      fontFamily: 'inherit',
+      alignItems: 'center',
+      display: 'inline-flex',
+      justifyContent: 'center',
+      backgroundColor: 'transparent',
+      border: `solid 1px ${varAlpha('currentColor', 0.16)}`,
+      transition: theme.transitions.create(['background-color', 'border-color']),
+      '&:hover': {
+        borderColor: varAlpha('currentColor', 0.24),
+        backgroundColor: varAlpha('currentColor', 0.08),
+      },
     },
-  },
   [`& .${snackbarClasses.actionButton}`]: {
     borderRadius: 6,
     lineHeight: 18 / 13,
@@ -149,6 +151,9 @@ const toastStyles = (theme: Theme): CSSObject => ({
 // ----------------------------------------------------------------------
 
 export const SnackbarRoot = styled(Toaster)(({ theme }) => ({
+  // Sonner ships with its own system-font stack. Force the toaster portal and
+  // every toast child to use the same Thai font as the MUI application theme.
+  fontFamily: `${theme.typography.fontFamily} !important`,
   '@keyframes rotate': {
     to: { transform: 'rotate(1turn)' },
   },

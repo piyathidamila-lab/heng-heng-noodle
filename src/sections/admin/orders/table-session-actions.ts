@@ -11,11 +11,13 @@ import { requireOrderAccess } from 'src/lib/auth-session';
 import { getPromptPayPayload, PromptPayNotConfiguredError } from 'src/lib/promptpay';
 import {
   getBillHistory,
+  getTakeawayBillHistory,
   getOrdersBySession,
   getOpenTableSessions,
   OrderValidationError,
   moveTableSessionRecord,
   closeTableSessionRecord,
+  markTakeawayOrderPaidRecord,
 } from 'src/lib/order-service';
 
 // ----------------------------------------------------------------------
@@ -28,6 +30,18 @@ export async function listOpenTableSessions(): Promise<TableSessionSummary[]> {
 export async function listBillHistoryAdmin(filter: BillHistoryFilter = {}): Promise<BillSummary[]> {
   await requireOrderAccess();
   return getBillHistory(filter);
+}
+
+export async function listTakeawayBillHistoryAdmin(
+  filter: BillHistoryFilter = {}
+): Promise<OrderRecord[]> {
+  await requireOrderAccess();
+  return getTakeawayBillHistory(filter);
+}
+
+export async function markTakeawayOrderPaid(id: string): Promise<void> {
+  await requireOrderAccess();
+  await markTakeawayOrderPaidRecord(id);
 }
 
 export async function closeTableSession(id: string): Promise<void> {

@@ -30,6 +30,7 @@ import { logoutMemberAction } from 'src/sections/loyalty/loyalty-actions';
 
 import { CartSheet } from '../components/cart-sheet';
 import { MenuItemCard } from '../components/menu-item-card';
+import { saveActiveTakeawayOrder } from '../takeaway-session';
 import { TableNameGate } from '../components/table-name-gate';
 import { OrderConfirmed } from '../components/order-confirmed';
 import { QrScannerDialog } from '../components/qr-scanner-dialog';
@@ -109,10 +110,42 @@ export function OrderView({ items, categories, bestSellers, shop, member }: Prop
 
   useLayoutEffect(() => {
     if (qrTable) {
-      setTableName(getSavedTableName(qrTable));
+      const savedName = getSavedTableName(qrTable);
+      setTableName(savedName);
+      if (savedName) {
+        setCustomer((current) => ({
+          ...current,
+          name: savedName,
+          orderType: 'dine-in',
+          tableNumber: qrTable,
+        }));
+      }
     }
     setNameChecked(true);
   }, [qrTable]);
+
+  const tableCustomerName = member?.displayName.trim() || tableName?.trim() || '';
+
+  useEffect(() => {
+    if (!qrTable || !tableCustomerName) return;
+
+    setCustomer((current) => {
+      if (
+        current.name === tableCustomerName &&
+        current.orderType === 'dine-in' &&
+        current.tableNumber === qrTable
+      ) {
+        return current;
+      }
+
+      return {
+        ...current,
+        name: tableCustomerName,
+        orderType: 'dine-in',
+        tableNumber: qrTable,
+      };
+    });
+  }, [qrTable, tableCustomerName]);
 
   // Stops a single device from having more than one table "open" at once: if
   // this device already claimed a different table, block scanning/opening a
@@ -281,7 +314,7 @@ export function OrderView({ items, categories, bestSellers, shop, member }: Prop
   const effectiveCustomer: CustomerInfo = qrTable
     ? {
         ...customer,
-        name: member?.displayName || tableName || '',
+        name: tableCustomerName,
         orderType: 'dine-in',
         tableNumber: qrTable,
       }
@@ -363,8 +396,15 @@ export function OrderView({ items, categories, bestSellers, shop, member }: Prop
 
   const handleNameSubmit = (name: string) => {
     if (!qrTable) return;
-    saveTableName(qrTable, name);
-    setTableName(name);
+    const trimmedName = name.trim();
+    saveTableName(qrTable, trimmedName);
+    setTableName(trimmedName);
+    setCustomer((current) => ({
+      ...current,
+      name: trimmedName,
+      orderType: 'dine-in',
+      tableNumber: qrTable,
+    }));
   };
 
   const handleScanTable = (label: string) => {
@@ -424,6 +464,13 @@ export function OrderView({ items, categories, bestSellers, shop, member }: Prop
         toast.success(`สั่งอาหารสำเร็จ! ออเดอร์ ${result.order.orderNumber}`);
         setView('orders');
       } else {
+        saveActiveTakeawayOrder({
+          id: result.order.id,
+          orderNumber: result.order.orderNumber,
+          customerName: effectiveCustomer.name,
+          createdAt: result.order.createdAt,
+        });
+
         setConfirmedOrder({
           orderNumber: result.order.orderNumber,
           orderTime: new Date(result.order.createdAt),
@@ -707,117 +754,133 @@ export function OrderView({ items, categories, bestSellers, shop, member }: Prop
 
       {!qrTable && (
         <Box sx={{ px: 2.5, mt: -2.5, position: 'relative', zIndex: 1 }}>
-          <Stack
-            direction="row"
-            sx={{
-              overflow: 'hidden',
-              borderRadius: 3,
-              bgcolor: 'common.white',
-              border: '1px solid',
-              borderColor: 'grey.200',
-              boxShadow: '0 10px 28px rgba(69,37,20,0.10)',
-            }}
-          >
-            <ButtonBase
-              onClick={() => {
-                if (homeActiveTable) {
-                  router.push(`/?table=${encodeURIComponent(homeActiveTable)}&view=orders`);
-                } else {
-                  setScannerOpen(true);
-                }
+          {!shop.isOpen && !homeActiveTable ? (
+            <Stack
+              direction="row"
+              alignItems="center"
+              spacing={1.5}
+              sx={{
+                p: 2,
+                minHeight: 86,
+                borderRadius: 3,
+                color: '#8B1111',
+                bgcolor: '#FFF0E4',
+                border: '1px solid #F7D9C7',
+                boxShadow: '0 10px 28px rgba(69,37,20,0.10)',
               }}
-              sx={{ flex: 1, p: 1.75, textAlign: 'left', justifyContent: 'flex-start' }}
             >
-              <Stack direction="row" spacing={1.25} alignItems="center">
-                <Box
-                  sx={{
-                    width: 40,
-                    height: 40,
-                    display: 'grid',
-                    flexShrink: 0,
-                    placeItems: 'center',
-                    borderRadius: 2,
-                    color: 'primary.main',
-                    bgcolor: 'primary.lighter',
-                  }}
-                >
-                  <Iconify
-                    icon={
-                      (homeActiveTable
-                        ? 'solar:bill-list-bold-duotone'
-                        : 'solar:qr-code-bold') as IconifyName
-                    }
-                    width={22}
-                  />
-                </Box>
-                <Box>
-                  <Typography variant="subtitle2">
-                    {homeActiveTable ? 'ดูรายการ' : 'สแกน QR'}
-                  </Typography>
-                  <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-                    {homeActiveTable ? `โต๊ะ ${homeActiveTable}` : 'สั่งที่โต๊ะ'}
-                  </Typography>
-                </Box>
-              </Stack>
-            </ButtonBase>
-
-            <Box sx={{ width: '1px', my: 1.5, bgcolor: 'grey.200' }} />
-
-            <ButtonBase
-              onClick={() => router.push('/tables')}
-              sx={{ flex: 1, p: 1.75, textAlign: 'left', justifyContent: 'flex-start' }}
+              <Box
+                sx={{
+                  width: 46,
+                  height: 46,
+                  flexShrink: 0,
+                  display: 'grid',
+                  placeItems: 'center',
+                  borderRadius: '50%',
+                  color: 'common.white',
+                  bgcolor: '#8B1111',
+                }}
+              >
+                <Iconify icon={'solar:forbidden-circle-bold' as IconifyName} width={25} />
+              </Box>
+              <Box sx={{ minWidth: 0 }}>
+                <Typography variant="subtitle1" sx={{ fontWeight: 800 }}>
+                  ร้านปิดอยู่ในขณะนี้
+                </Typography>
+                <Typography variant="body2" sx={{ mt: 0.25, color: '#A04435' }}>
+                  {shop.closureReason
+                    ? `ร้านหยุดเนื่องจาก ${shop.closureReason}`
+                    : 'ดูเมนูได้ตามปกติ แต่ยังไม่สามารถสั่งอาหารได้'}
+                </Typography>
+              </Box>
+            </Stack>
+          ) : (
+            <Stack
+              direction="row"
+              sx={{
+                overflow: 'hidden',
+                borderRadius: 3,
+                bgcolor: 'common.white',
+                border: '1px solid',
+                borderColor: 'grey.200',
+                boxShadow: '0 10px 28px rgba(69,37,20,0.10)',
+              }}
             >
-              <Stack direction="row" spacing={1.25} alignItems="center">
-                <Box
-                  sx={{
-                    width: 40,
-                    height: 40,
-                    display: 'grid',
-                    flexShrink: 0,
-                    placeItems: 'center',
-                    borderRadius: 2,
-                    bgcolor: '#FFF2D6',
-                    fontSize: 21,
-                  }}
-                >
-                  🪑
-                </Box>
-                <Box>
-                  <Typography variant="subtitle2">ดูโต๊ะว่าง</Typography>
-                  <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-                    เช็กสถานะ
-                  </Typography>
-                </Box>
-              </Stack>
-            </ButtonBase>
-          </Stack>
+              <ButtonBase
+                onClick={() => {
+                  if (homeActiveTable) {
+                    router.push(`/?table=${encodeURIComponent(homeActiveTable)}&view=orders`);
+                  } else {
+                    setScannerOpen(true);
+                  }
+                }}
+                sx={{ flex: 1, p: 1.75, textAlign: 'left', justifyContent: 'flex-start' }}
+              >
+                <Stack direction="row" spacing={1.25} alignItems="center">
+                  <Box
+                    sx={{
+                      width: 40,
+                      height: 40,
+                      display: 'grid',
+                      flexShrink: 0,
+                      placeItems: 'center',
+                      borderRadius: 2,
+                      color: 'primary.main',
+                      bgcolor: 'primary.lighter',
+                    }}
+                  >
+                    <Iconify
+                      icon={
+                        (homeActiveTable
+                          ? 'solar:bill-list-bold-duotone'
+                          : 'solar:qr-code-bold') as IconifyName
+                      }
+                      width={22}
+                    />
+                  </Box>
+                  <Box>
+                    <Typography variant="subtitle2">
+                      {homeActiveTable ? 'ดูรายการ' : 'สแกน QR'}
+                    </Typography>
+                    <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+                      {homeActiveTable ? `โต๊ะ ${homeActiveTable}` : 'สั่งที่โต๊ะ'}
+                    </Typography>
+                  </Box>
+                </Stack>
+              </ButtonBase>
+
+              <Box sx={{ width: '1px', my: 1.5, bgcolor: 'grey.200' }} />
+
+              <ButtonBase
+                onClick={() => router.push('/tables')}
+                sx={{ flex: 1, p: 1.75, textAlign: 'left', justifyContent: 'flex-start' }}
+              >
+                <Stack direction="row" spacing={1.25} alignItems="center">
+                  <Box
+                    sx={{
+                      width: 40,
+                      height: 40,
+                      display: 'grid',
+                      flexShrink: 0,
+                      placeItems: 'center',
+                      borderRadius: 2,
+                      bgcolor: '#FFF2D6',
+                      fontSize: 21,
+                    }}
+                  >
+                    🪑
+                  </Box>
+                  <Box>
+                    <Typography variant="subtitle2">ดูโต๊ะว่าง</Typography>
+                    <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+                      เช็กสถานะ
+                    </Typography>
+                  </Box>
+                </Stack>
+              </ButtonBase>
+            </Stack>
+          )}
         </Box>
-      )}
-
-      {!shop.isOpen && (
-        <Stack
-          direction="row"
-          spacing={1}
-          sx={{
-            mx: 2.5,
-            mt: 2,
-            p: 1.5,
-            borderRadius: 2,
-            bgcolor: 'error.lighter',
-            color: 'error.darker',
-          }}
-        >
-          <Iconify
-            icon={'solar:forbidden-circle-bold' as IconifyName}
-            width={20}
-            sx={{ flexShrink: 0, mt: 0.1 }}
-          />
-          <Typography variant="body2">
-            {shop.closureReason
-              ? `วันนี้ร้านหยุดเนื่องจาก ${shop.closureReason} ดูเมนูได้ตามปกติ แต่ยังไม่สามารถสั่งอาหารได้`
-              : 'ร้านปิดอยู่ในขณะนี้ ดูเมนูได้ตามปกติ แต่ยังไม่สามารถสั่งอาหารได้'}
-          </Typography>
-        </Stack>
       )}
 
       {shop.announcement.enabled && shop.announcement.message.trim() && (
@@ -845,7 +908,7 @@ export function OrderView({ items, categories, bestSellers, shop, member }: Prop
       )}
 
       {view === 'orders' && qrTable ? (
-        <TableOrdersPanel table={qrTable} currentName={tableName ?? ''} />
+        <TableOrdersPanel table={qrTable} currentName={tableCustomerName} />
       ) : (
         <>
           <ActiveOrderStatus
@@ -933,48 +996,6 @@ export function OrderView({ items, categories, bestSellers, shop, member }: Prop
                     🍜
                   </Box>
                 </Stack>
-
-                {/* <Stack
-                  direction="row"
-                  spacing={0.75}
-                  sx={{ mt: 2, position: 'relative', overflow: 'hidden' }}
-                >
-                  {shop.customOrder.steps.slice(0, 3).map((step, index) => (
-                    <Stack
-                      key={step.id}
-                      direction="row"
-                      spacing={0.5}
-                      alignItems="center"
-                      sx={{
-                        minWidth: 0,
-                        px: 0.9,
-                        py: 0.55,
-                        borderRadius: 1.5,
-                        bgcolor: 'rgba(255,255,255,0.12)',
-                      }}
-                    >
-                      <Box
-                        sx={{
-                          width: 18,
-                          height: 18,
-                          display: 'grid',
-                          flexShrink: 0,
-                          placeItems: 'center',
-                          borderRadius: '50%',
-                          color: '#7A1010',
-                          bgcolor: '#FFD976',
-                          fontSize: 10,
-                          fontWeight: 800,
-                        }}
-                      >
-                        {index + 1}
-                      </Box>
-                      <Typography variant="caption" noWrap sx={{ fontWeight: 700 }}>
-                        {step.title}
-                      </Typography>
-                    </Stack>
-                  ))}
-                </Stack> */}
 
                 <Stack
                   direction="row"
@@ -1108,7 +1129,7 @@ export function OrderView({ items, categories, bestSellers, shop, member }: Prop
         lines={cartLines}
         total={totalPrice}
         submitting={submitting}
-        qrMode={!!qrTable}
+        qrMode={!!qrTable || !!homeActiveTable}
         member={member}
         shopOpen={shop.isOpen}
         onAdd={handleAdd}

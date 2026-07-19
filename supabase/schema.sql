@@ -211,12 +211,24 @@ create table if not exists public.orders (
   note text not null default '',
   status text not null default 'pending'
     check (status in ('pending', 'preparing', 'served', 'completed', 'cancelled')),
+  payment_status text not null default 'unpaid'
+    check (payment_status in ('unpaid', 'paid')),
+  paid_at timestamptz,
   total numeric(10, 2) not null check (total >= 0),
   created_at timestamptz not null default now()
 );
 
 -- re-running on a database created before table sessions were added
 alter table public.orders add column if not exists session_id uuid references public.table_sessions (id) on delete set null;
+alter table public.orders add column if not exists payment_status text not null default 'unpaid'
+  check (payment_status in ('unpaid', 'paid'));
+alter table public.orders add column if not exists paid_at timestamptz;
+
+-- Existing completed takeaway orders predate the separate payment status and
+-- were treated as settled by the old workflow.
+update public.orders
+set payment_status = 'paid', paid_at = coalesce(paid_at, created_at)
+where order_type = 'takeaway' and status = 'completed' and payment_status = 'unpaid';
 
 -- the order form no longer collects a phone number — relax the old
 -- requirement rather than dropping the column, so historical orders that

@@ -7,6 +7,7 @@ import { awardStarsForOrder, awardStarsForSession } from './loyalty-service';
 // ----------------------------------------------------------------------
 
 export type OrderStatus = 'pending' | 'preparing' | 'served' | 'completed' | 'cancelled';
+export type PaymentStatus = 'unpaid' | 'paid';
 
 export type OrderItemRecord = {
   id: string;
@@ -24,6 +25,8 @@ export type OrderRecord = {
   tableNumber: string;
   note: string;
   status: OrderStatus;
+  paymentStatus: PaymentStatus;
+  paidAt: string | null;
   total: number;
   createdAt: string;
   items: OrderItemRecord[];
@@ -218,7 +221,7 @@ export async function createOrderRecord(input: CreateOrderInput): Promise<OrderR
       customer_id: input.orderType === 'takeaway' ? (input.customerId ?? null) : null,
     })
     .select(
-      'id, seq, customer_name, customer_phone, order_type, table_number, note, status, total, created_at'
+      'id, seq, customer_name, customer_phone, order_type, table_number, note, status, payment_status, paid_at, total, created_at'
     )
     .single();
 
@@ -239,6 +242,8 @@ export async function createOrderRecord(input: CreateOrderInput): Promise<OrderR
     tableNumber: order.table_number,
     note: order.note,
     status: order.status,
+    paymentStatus: order.payment_status as PaymentStatus,
+    paidAt: order.paid_at,
     total: Number(order.total),
     createdAt: order.created_at,
     items: orderItems.map((item, index) => ({
@@ -251,7 +256,7 @@ export async function createOrderRecord(input: CreateOrderInput): Promise<OrderR
 }
 
 const ORDER_SELECT_COLUMNS =
-  'id, seq, customer_name, customer_phone, order_type, table_number, note, status, total, created_at, order_items (id, name, price, quantity)';
+  'id, seq, customer_name, customer_phone, order_type, table_number, note, status, payment_status, paid_at, total, created_at, order_items (id, name, price, quantity)';
 
 type OrderRow = {
   id: string;
@@ -262,6 +267,8 @@ type OrderRow = {
   table_number: string;
   note: string;
   status: OrderStatus;
+  payment_status: PaymentStatus;
+  paid_at: string | null;
   total: number;
   created_at: string;
   order_items: { id: string; name: string; price: number; quantity: number }[] | null;
@@ -277,6 +284,8 @@ function mapOrderRow(order: OrderRow): OrderRecord {
     tableNumber: order.table_number,
     note: order.note,
     status: order.status,
+    paymentStatus: order.payment_status,
+    paidAt: order.paid_at,
     total: Number(order.total),
     createdAt: order.created_at,
     items: (order.order_items ?? []).map((item) => ({
@@ -333,6 +342,29 @@ export async function getOrderHistory(filter: OrderHistoryFilter = {}): Promise<
 
   const { data, error } = await query;
 
+  if (error) throw error;
+
+  return (data ?? []).map(mapOrderRow);
+}
+
+/** Takeaway orders shown in the checkout screen, newest first. */
+export async function getTakeawayBillHistory(
+  filter: OrderHistoryFilter = {}
+): Promise<OrderRecord[]> {
+  const supabase = getSupabaseAdmin();
+
+  let query = supabase
+    .from('orders')
+    .select(ORDER_SELECT_COLUMNS)
+    .eq('order_type', 'takeaway')
+    .neq('status', 'cancelled')
+    .order('created_at', { ascending: false })
+    .limit(500);
+
+  if (filter.from) query = query.gte('created_at', `${filter.from}T00:00:00`);
+  if (filter.to) query = query.lte('created_at', `${filter.to}T23:59:59.999`);
+
+  const { data, error } = await query;
   if (error) throw error;
 
   return (data ?? []).map(mapOrderRow);
@@ -514,10 +546,36 @@ export async function updateOrderStatusRecord(id: string, status: OrderStatus): 
   const { error } = await supabase.from('orders').update({ status }).eq('id', id);
 
   if (error) throw error;
+}
 
-  if (status === 'completed') {
-    await awardStarsForOrder(id);
+/** Marks a takeaway order as paid without conflating payment with kitchen progress. */
+export async function markTakeawayOrderPaidRecord(id: string): Promise<void> {
+  const supabase = getSupabaseAdmin();
+
+  const { data: order, error: selectError } = await supabase
+    .from('orders')
+    .select('id, order_type, status, payment_status')
+    .eq('id', id)
+    .maybeSingle();
+
+  if (selectError) throw selectError;
+  if (!order || order.order_type !== 'takeaway') {
+    throw new OrderValidationError('ไม่พบออเดอร์กลับบ้าน');
   }
+  if (order.status === 'cancelled') {
+    throw new OrderValidationError('ไม่สามารถรับชำระออเดอร์ที่ยกเลิกแล้ว');
+  }
+  if (order.payment_status === 'paid') return;
+
+  const { error } = await supabase
+    .from('orders')
+    .update({ payment_status: 'paid', paid_at: new Date().toISOString() })
+    .eq('id', id)
+    .eq('payment_status', 'unpaid');
+
+  if (error) throw error;
+
+  await awardStarsForOrder(id);
 }
 
 export type TableSessionSummary = {

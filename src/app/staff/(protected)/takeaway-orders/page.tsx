@@ -6,10 +6,10 @@ import { StaffOrdersView } from 'src/sections/staff/orders/staff-orders-view';
 
 // ----------------------------------------------------------------------
 
-export const metadata: Metadata = { title: 'ออเดอร์ | เฮงเฮง ก๋วยเตี๋ยว' };
+export const metadata: Metadata = { title: 'ออเดอร์กลับบ้าน | เฮงเฮง ก๋วยเตี๋ยว' };
 
 export default async function Page() {
   const [orders, sessions] = await Promise.all([getOrders(), getOpenTableSessions()]);
 
-  return <StaffOrdersView mode="dine-in" initialOrders={orders} initialSessions={sessions} />;
+  return <StaffOrdersView mode="takeaway" initialOrders={orders} initialSessions={sessions} />;
 }

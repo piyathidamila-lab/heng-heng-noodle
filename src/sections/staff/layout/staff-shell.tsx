@@ -19,7 +19,8 @@ import { staffLogoutAction } from './staff-actions';
 // ----------------------------------------------------------------------
 
 const NAV_ITEMS = [
-  { label: 'ออเดอร์', path: '/staff/orders' },
+  { label: 'ออเดอร์ในร้าน', path: '/staff/orders' },
+  { label: 'ออเดอร์กลับบ้าน', path: '/staff/takeaway-orders' },
   { label: 'ประวัติออเดอร์', path: '/staff/order-history' },
   { label: 'เช็คบิล', path: '/staff/bills' },
   { label: 'แลกของรางวัล', path: '/staff/redemptions' },

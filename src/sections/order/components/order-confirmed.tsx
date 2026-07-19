@@ -52,6 +52,43 @@ export function OrderConfirmed({
         </Typography>
       </Stack>
 
+      {customer.orderType === 'takeaway' && (
+        <Stack
+          direction="row"
+          alignItems="center"
+          spacing={1.5}
+          sx={{
+            p: 1.75,
+            borderRadius: 2.5,
+            border: '1px solid #F1CB79',
+            bgcolor: '#FFF9EA',
+          }}
+        >
+          <Box
+            sx={{
+              width: 44,
+              height: 44,
+              flexShrink: 0,
+              display: 'grid',
+              placeItems: 'center',
+              borderRadius: 2,
+              bgcolor: '#FFE9AD',
+              color: '#96650A',
+            }}
+          >
+            <Iconify icon="solar:clock-circle-bold" width={25} />
+          </Box>
+          <Box>
+            <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
+              กำลังรออาหาร
+            </Typography>
+            <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+              ร้านรับออเดอร์แล้ว สามารถรอรับอาหารได้เลย
+            </Typography>
+          </Box>
+        </Stack>
+      )}
+
       <Stack
         spacing={2}
         sx={{ p: 2, borderRadius: 2, border: '1px solid', borderColor: 'grey.200' }}

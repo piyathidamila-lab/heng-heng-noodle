@@ -11,6 +11,7 @@ import Typography from '@mui/material/Typography';
 
 import { OrderStatusBadge } from './order-status-badge';
 import { getTableOrders, getOrderStatus, getMyOrderHistory } from '../order-actions';
+import { getActiveTakeawayOrder, clearActiveTakeawayOrder } from '../takeaway-session';
 
 // ----------------------------------------------------------------------
 
@@ -26,6 +27,7 @@ const STATUS_RANK: Record<OrderStatus, number> = {
 
 type ActiveOrder = {
   orderNumber: string;
+  customerName: string;
   status: OrderStatus;
   extraCount: number;
 };
@@ -65,17 +67,17 @@ export function ActiveOrderStatus({ table, memberId, onViewOrders }: Props) {
           );
           setActive({
             orderNumber: leader.orderNumber,
+            customerName: leader.customerName,
             status: leader.status,
             extraCount: inProgress.length - 1,
           });
         } else {
-          if (!memberId) {
-            setActive(null);
-            return;
-          }
-
-          const history = await getMyOrderHistory();
-          const lastTakeaway = history.find((order) => order.orderType === 'takeaway');
+          const savedOrder = getActiveTakeawayOrder();
+          const lastTakeaway = savedOrder
+            ? savedOrder
+            : memberId
+              ? (await getMyOrderHistory()).find((order) => order.orderType === 'takeaway')
+              : null;
           if (!lastTakeaway) {
             setActive(null);
             return;
@@ -85,10 +87,16 @@ export function ActiveOrderStatus({ table, memberId, onViewOrders }: Props) {
           if (cancelled) return;
 
           if (!status || !ACTIVE_STATUSES.includes(status)) {
+            if (savedOrder?.id === lastTakeaway.id) clearActiveTakeawayOrder();
             setActive(null);
             return;
           }
-          setActive({ orderNumber: lastTakeaway.orderNumber, status, extraCount: 0 });
+          setActive({
+            orderNumber: lastTakeaway.orderNumber,
+            customerName: savedOrder?.customerName ?? '',
+            status,
+            extraCount: 0,
+          });
         }
       } catch (error) {
         console.error(error);
@@ -127,11 +135,13 @@ export function ActiveOrderStatus({ table, memberId, onViewOrders }: Props) {
       >
         <Box sx={{ minWidth: 0 }}>
           <Typography variant="subtitle2" noWrap>
-            ออเดอร์ {active.orderNumber}
+            {table ? `ออเดอร์ ${active.orderNumber}` : 'กำลังรออาหาร'}
             {active.extraCount > 0 ? ` และอีก ${active.extraCount} รายการ` : ''}
           </Typography>
           <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-            {onViewOrders ? 'แตะเพื่อดูรายละเอียด' : 'กำลังติดตามสถานะออเดอร์ของคุณ'}
+            {onViewOrders
+              ? 'แตะเพื่อดูรายละเอียด'
+              : `ออเดอร์ ${active.orderNumber}${active.customerName ? ` · คุณ${active.customerName}` : ''}`}
           </Typography>
         </Box>
         <OrderStatusBadge status={active.status} />

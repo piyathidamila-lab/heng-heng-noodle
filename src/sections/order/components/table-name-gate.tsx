@@ -8,6 +8,8 @@ import Button from '@mui/material/Button';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 
+import { Logo } from 'src/components/logo';
+
 // ----------------------------------------------------------------------
 
 type Props = {
@@ -41,10 +43,13 @@ export function TableNameGate({ table, shopName, onSubmit }: Props) {
         textAlign: 'center',
       }}
     >
-      <Box sx={{ fontSize: 56, mb: 2 }}>🍜</Box>
-      <Typography variant="h4">{shopName}</Typography>
-      <Typography sx={{ mt: 1, opacity: 0.8 }}>โต๊ะ {table}</Typography>
-
+      <Logo sx={{ width: 140, height: 140 }} />
+      <Stack mt={2}>
+        <Typography variant="h4">{shopName}</Typography>
+        <Typography variant="subtitle1" sx={{ mt: 1, opacity: 0.8 }}>
+          โต๊ะ {table}
+        </Typography>
+      </Stack>
       <Stack
         component="form"
         onSubmit={handleSubmit}
@@ -68,7 +73,13 @@ export function TableNameGate({ table, shopName, onSubmit }: Props) {
           }}
         />
 
-        <Button type="submit" variant="contained" color="secondary" size="large" disabled={!name.trim()}>
+        <Button
+          type="submit"
+          variant="contained"
+          color="primary"
+          size="large"
+          disabled={!name.trim()}
+        >
           เริ่มสั่งอาหาร
         </Button>
       </Stack>
