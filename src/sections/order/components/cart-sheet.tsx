@@ -4,17 +4,15 @@ import type { RestaurantTable } from 'src/lib/table-service';
 import type { CustomOrderSelection } from 'src/lib/shop-settings-service';
 
 import Box from '@mui/material/Box';
-import Radio from '@mui/material/Radio';
+import Chip from '@mui/material/Chip';
 import Stack from '@mui/material/Stack';
 import Drawer from '@mui/material/Drawer';
 import Button from '@mui/material/Button';
-import Divider from '@mui/material/Divider';
 import MenuItem from '@mui/material/MenuItem';
 import TextField from '@mui/material/TextField';
+import ButtonBase from '@mui/material/ButtonBase';
 import IconButton from '@mui/material/IconButton';
 import Typography from '@mui/material/Typography';
-import RadioGroup from '@mui/material/RadioGroup';
-import FormControlLabel from '@mui/material/FormControlLabel';
 
 import { Iconify } from 'src/components/iconify';
 
@@ -34,6 +32,7 @@ type Props = {
   submitting: boolean;
   qrMode: boolean;
   tables: RestaurantTable[];
+  shopOpen: boolean;
   onAdd: (id: string) => void;
   onRemove: (id: string) => void;
   customer: CustomerInfo;
@@ -49,6 +48,7 @@ export function CartSheet({
   submitting,
   qrMode,
   tables,
+  shopOpen,
   onAdd,
   onRemove,
   customer,
@@ -56,9 +56,11 @@ export function CartSheet({
   onConfirm,
 }: Props) {
   const canConfirm =
+    shopOpen &&
     lines.length > 0 &&
     customer.name.trim().length > 0 &&
     (customer.orderType === 'takeaway' || customer.tableNumber.trim().length > 0);
+  const totalQuantity = lines.reduce((sum, line) => sum + line.quantity, 0);
 
   return (
     <Drawer
@@ -70,65 +72,240 @@ export function CartSheet({
           sx: {
             maxWidth: 480,
             mx: 'auto',
-            borderTopLeftRadius: 20,
-            borderTopRightRadius: 20,
-            maxHeight: '88dvh',
+            display: 'flex',
+            flexDirection: 'column',
+            overflow: 'hidden',
+            borderTopLeftRadius: 28,
+            borderTopRightRadius: 28,
+            maxHeight: '92dvh',
+            bgcolor: '#FBF8F4',
+            boxShadow: '0 -18px 60px rgba(68,24,18,0.18)',
           },
         },
       }}
     >
-      <Stack
-        direction="row"
-        alignItems="center"
-        justifyContent="space-between"
-        sx={{ px: 2, pt: 2, pb: 1 }}
+      <Box
+        sx={{
+          position: 'relative',
+          overflow: 'hidden',
+          px: 2.5,
+          pt: 1.25,
+          pb: 2.25,
+          color: 'common.white',
+          height: '150px',
+          background: 'linear-gradient(135deg, #67100E 0%, #A51D17 62%, #D25125 100%)',
+        }}
       >
-        <Typography variant="h6">ตะกร้าของฉัน</Typography>
-        <IconButton onClick={onClose}>
-          <Iconify icon="mingcute:close-line" />
-        </IconButton>
-      </Stack>
+        <Box
+          sx={{
+            width: 42,
+            height: 4,
+            mx: 'auto',
+            mb: 1.5,
+            borderRadius: 1,
+            bgcolor: 'rgba(255,255,255,0.40)',
+          }}
+        />
+        <Box
+          sx={{
+            position: 'absolute',
+            width: 130,
+            height: 130,
+            top: -70,
+            right: -35,
+            borderRadius: '50%',
+            bgcolor: 'rgba(255,255,255,0.07)',
+          }}
+        />
+        <Stack direction="row" alignItems="center" justifyContent="space-between">
+          <Stack direction="row" spacing={1.25} alignItems="center">
+            <Box
+              sx={{
+                width: 44,
+                height: 44,
+                display: 'grid',
+                placeItems: 'center',
+                borderRadius: 2,
+                bgcolor: 'rgba(255,255,255,0.14)',
+              }}
+            >
+              <Iconify icon="solar:cart-3-bold" width={24} />
+            </Box>
+            <Box>
+              <Typography variant="h5" sx={{ color: 'common.white' }}>
+                ตะกร้าของฉัน
+              </Typography>
+              <Typography variant="caption" sx={{ opacity: 0.78 }}>
+                ตรวจสอบรายการก่อนยืนยัน
+              </Typography>
+            </Box>
+          </Stack>
+          <Stack direction="row" spacing={0.75} alignItems="center">
+            {totalQuantity > 0 && (
+              <Chip
+                size="small"
+                label={`${totalQuantity} รายการ`}
+                sx={{ color: '#7A1010', fontWeight: 800, bgcolor: '#FFD976' }}
+              />
+            )}
+            <IconButton
+              onClick={onClose}
+              aria-label="ปิดตะกร้า"
+              sx={{
+                mr: -1,
+                color: 'common.white',
+                bgcolor: 'rgba(255,255,255,0.12)',
+                '&:hover': { bgcolor: 'rgba(255,255,255,0.20)' },
+              }}
+            >
+              <Iconify icon="mingcute:close-line" />
+            </IconButton>
+          </Stack>
+        </Stack>
+      </Box>
 
-      <Stack sx={{ px: 2, pb: 3, overflowY: 'auto' }} spacing={2.5}>
+      <Stack sx={{ flex: 1, px: 2, py: 2, overflowY: 'auto' }} spacing={2}>
         {lines.length === 0 ? (
-          <Typography sx={{ color: 'text.secondary', textAlign: 'center', py: 4 }}>
-            ยังไม่มีรายการอาหารในตะกร้า
-          </Typography>
+          <Stack alignItems="center" spacing={1.25} sx={{ px: 2, py: 6 }}>
+            <Box
+              sx={{
+                width: 82,
+                height: 82,
+                display: 'grid',
+                placeItems: 'center',
+                borderRadius: '50%',
+                bgcolor: 'common.white',
+                boxShadow: '0 8px 24px rgba(69,37,20,0.08)',
+                fontSize: 40,
+              }}
+            >
+              🍜
+            </Box>
+            <Typography variant="h6">ตะกร้ายังว่างอยู่</Typography>
+            <Typography variant="body2" sx={{ color: 'text.secondary', textAlign: 'center' }}>
+              เลือกเมนูอร่อย ๆ แล้วกลับมาตรวจสอบรายการที่นี่
+            </Typography>
+            <Button variant="outlined" onClick={onClose} sx={{ mt: 1, borderRadius: 2 }}>
+              กลับไปเลือกเมนู
+            </Button>
+          </Stack>
         ) : (
-          <Stack spacing={1.5} divider={<Divider flexItem />}>
+          <Stack spacing={1.25}>
+            <Stack direction="row" alignItems="center" justifyContent="space-between">
+              <Typography variant="h6">รายการอาหาร</Typography>
+              <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+                {lines.length} เมนู · {totalQuantity} ชิ้น
+              </Typography>
+            </Stack>
             {lines.map(({ item, quantity, customization }) => (
-              <Stack key={item.id} direction="row" spacing={1.5} alignItems="center">
-                <Box sx={{ fontSize: 24 }}>{item.emoji}</Box>
+              <Stack
+                key={item.id}
+                direction="row"
+                spacing={1.25}
+                alignItems="flex-start"
+                sx={{
+                  p: 1.25,
+                  borderRadius: 2.5,
+                  border: '1px solid',
+                  borderColor: 'grey.200',
+                  bgcolor: 'common.white',
+                  boxShadow: '0 5px 16px rgba(69,37,20,0.05)',
+                }}
+              >
+                <Box
+                  sx={{
+                    width: 68,
+                    height: 68,
+                    display: 'grid',
+                    flexShrink: 0,
+                    placeItems: 'center',
+                    borderRadius: 2,
+                    bgcolor: '#F7F2EC',
+                    fontSize: 30,
+                    backgroundImage: item.imageUrl ? `url(${item.imageUrl})` : undefined,
+                    backgroundSize: 'cover',
+                    backgroundPosition: 'center',
+                  }}
+                >
+                  {!item.imageUrl && item.emoji}
+                </Box>
                 <Box sx={{ flex: 1, minWidth: 0 }}>
-                  <Typography variant="subtitle2" noWrap>
-                    {item.name}
-                  </Typography>
-                  <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-                    {item.price} บาท
-                  </Typography>
-                  {customization && (
+                  <Stack direction="row" spacing={1} alignItems="flex-start">
+                    <Typography
+                      variant="subtitle2"
+                      sx={{
+                        flex: 1,
+                        display: '-webkit-box',
+                        WebkitBoxOrient: 'vertical',
+                        WebkitLineClamp: 2,
+                        overflow: 'hidden',
+                      }}
+                    >
+                      {item.name}
+                    </Typography>
+                    <Typography variant="subtitle2" sx={{ color: 'primary.main', flexShrink: 0 }}>
+                      ฿{(item.price * quantity).toLocaleString('th-TH')}
+                    </Typography>
+                  </Stack>
+                  {customization && item.description && (
                     <Typography
                       variant="caption"
-                      sx={{ color: 'text.secondary', display: 'block' }}
+                      sx={{
+                        mt: 0.25,
+                        color: 'text.secondary',
+                        display: '-webkit-box',
+                        WebkitBoxOrient: 'vertical',
+                        WebkitLineClamp: 2,
+                        overflow: 'hidden',
+                      }}
                     >
                       {item.description}
                     </Typography>
                   )}
+
+                  <Stack
+                    direction="row"
+                    alignItems="center"
+                    justifyContent="space-between"
+                    sx={{ mt: 1 }}
+                  >
+                    <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+                      ฿{item.price.toLocaleString('th-TH')} / ชิ้น
+                    </Typography>
+                    <Stack
+                      direction="row"
+                      spacing={0.25}
+                      alignItems="center"
+                      sx={{ p: 0.25, borderRadius: 2, bgcolor: '#F7F2EC' }}
+                    >
+                      <IconButton
+                        size="small"
+                        onClick={() => onRemove(item.id)}
+                        aria-label={`ลดจำนวน ${item.name}`}
+                        sx={{ width: 30, height: 30, color: 'primary.main' }}
+                      >
+                        <Iconify icon="mingcute:minimize-line" width={18} />
+                      </IconButton>
+                      <Typography variant="subtitle2" sx={{ minWidth: 24, textAlign: 'center' }}>
+                        {quantity}
+                      </Typography>
+                      <IconButton
+                        size="small"
+                        onClick={() => onAdd(item.id)}
+                        aria-label={`เพิ่มจำนวน ${item.name}`}
+                        sx={{
+                          width: 30,
+                          height: 30,
+                          color: 'common.white',
+                          bgcolor: 'primary.main',
+                          '&:hover': { bgcolor: 'primary.dark' },
+                        }}
+                      >
+                        <Iconify icon="mingcute:add-line" width={18} />
+                      </IconButton>
+                    </Stack>
+                  </Stack>
                 </Box>
-                <Stack direction="row" spacing={0.5} alignItems="center">
-                  <IconButton size="small" color="primary" onClick={() => onRemove(item.id)}>
-                    <Iconify icon="eva:minus-circle-fill" width={22} />
-                  </IconButton>
-                  <Typography variant="subtitle2" sx={{ minWidth: 18, textAlign: 'center' }}>
-                    {quantity}
-                  </Typography>
-                  <IconButton size="small" color="primary" onClick={() => onAdd(item.id)}>
-                    <Iconify icon="solar:add-circle-bold" width={22} />
-                  </IconButton>
-                </Stack>
-                <Typography variant="subtitle2" sx={{ minWidth: 56, textAlign: 'right' }}>
-                  {item.price * quantity} บาท
-                </Typography>
               </Stack>
             ))}
           </Stack>
@@ -136,56 +313,128 @@ export function CartSheet({
 
         {lines.length > 0 && (
           <>
-            <Divider />
-
-            <Stack spacing={1.5}>
-              <Typography variant="subtitle1">ข้อมูลผู้สั่ง</Typography>
+            <Stack
+              spacing={1.5}
+              sx={{
+                p: 1.75,
+                borderRadius: 3,
+                border: '1px solid',
+                borderColor: 'grey.200',
+                bgcolor: 'common.white',
+              }}
+            >
+              <Stack direction="row" spacing={1} alignItems="center">
+                <Box
+                  sx={{
+                    width: 36,
+                    height: 36,
+                    display: 'grid',
+                    placeItems: 'center',
+                    borderRadius: 1.75,
+                    color: 'primary.main',
+                    bgcolor: 'primary.lighter',
+                  }}
+                >
+                  <Iconify icon="solar:user-id-bold" width={20} />
+                </Box>
+                <Box>
+                  <Typography variant="subtitle1">ข้อมูลการสั่งซื้อ</Typography>
+                  <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+                    ระบุข้อมูลให้ครบก่อนยืนยัน
+                  </Typography>
+                </Box>
+              </Stack>
 
               {qrMode ? (
                 <Stack
                   direction="row"
                   alignItems="center"
                   spacing={1}
-                  sx={{ p: 1.5, borderRadius: 1.5, bgcolor: 'grey.100' }}
+                  sx={{
+                    p: 1.5,
+                    borderRadius: 2,
+                    color: '#087A4B',
+                    bgcolor: '#E5F8ED',
+                    border: '1px solid #B5E2C8',
+                  }}
                 >
+                  <Iconify icon="solar:check-circle-bold" width={20} />
                   <Typography variant="body2">
                     สั่งโดย <strong>{customer.name}</strong> · โต๊ะ {customer.tableNumber}
                   </Typography>
                 </Stack>
               ) : (
                 <TextField
-                  label="ชื่อผู้สั่ง"
-                  size="small"
+                  label="ชื่อผู้สั่ง *"
+                  placeholder="กรอกชื่อของคุณ"
                   value={customer.name}
                   onChange={(e) => onChangeCustomer({ name: e.target.value })}
+                  slotProps={{ input: { sx: { borderRadius: 2 } } }}
                   fullWidth
                 />
               )}
 
               {!qrMode && (
-                <RadioGroup
-                  row
-                  value={customer.orderType}
-                  onChange={(e) =>
-                    onChangeCustomer({ orderType: e.target.value as CustomerInfo['orderType'] })
-                  }
-                >
-                  <FormControlLabel value="dine-in" control={<Radio />} label="ทานที่ร้าน" />
-                  <FormControlLabel value="takeaway" control={<Radio />} label="กลับบ้าน" />
-                </RadioGroup>
+                <Box>
+                  <Typography variant="caption" sx={{ mb: 0.75, color: 'text.secondary' }}>
+                    รูปแบบการรับอาหาร
+                  </Typography>
+                  <Box
+                    sx={{
+                      mt: 0.75,
+                      display: 'grid',
+                      gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+                      gap: 1,
+                    }}
+                  >
+                    {(
+                      [
+                        ['dine-in', '🍽️', 'ทานที่ร้าน', 'เลือกหมายเลขโต๊ะ'],
+                        ['takeaway', '🛍️', 'รับกลับบ้าน', 'รับอาหารที่ร้าน'],
+                      ] as const
+                    ).map(([value, emoji, label, description]) => {
+                      const isSelected = customer.orderType === value;
+
+                      return (
+                        <ButtonBase
+                          key={value}
+                          onClick={() => onChangeCustomer({ orderType: value })}
+                          aria-pressed={isSelected}
+                          sx={{
+                            p: 1.25,
+                            display: 'block',
+                            textAlign: 'left',
+                            borderRadius: 2,
+                            border: '2px solid',
+                            borderColor: isSelected ? 'primary.main' : 'grey.200',
+                            bgcolor: isSelected ? '#FFF0ED' : 'common.white',
+                          }}
+                        >
+                          <Typography sx={{ fontSize: 22, lineHeight: 1 }}>{emoji}</Typography>
+                          <Typography variant="subtitle2" sx={{ mt: 0.75 }}>
+                            {label}
+                          </Typography>
+                          <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+                            {description}
+                          </Typography>
+                        </ButtonBase>
+                      );
+                    })}
+                  </Box>
+                </Box>
               )}
 
               {!qrMode && customer.orderType === 'dine-in' && (
                 <TextField
                   select
-                  label="หมายเลขโต๊ะ"
-                  size="small"
+                  label="หมายเลขโต๊ะ *"
                   value={customer.tableNumber}
                   onChange={(e) => onChangeCustomer({ tableNumber: e.target.value })}
                   helperText={
                     tables.length === 0 ? 'ยังไม่มีข้อมูลโต๊ะ กรุณาติดต่อพนักงาน' : undefined
                   }
                   disabled={tables.length === 0}
+                  slotProps={{ input: { sx: { borderRadius: 2 } } }}
                   fullWidth
                 >
                   {tables.map((table) => (
@@ -198,38 +447,90 @@ export function CartSheet({
 
               <TextField
                 label="หมายเหตุ (ถ้ามี)"
-                size="small"
                 placeholder="เช่น ไม่ใส่ผัก, เผ็ดน้อย"
                 value={customer.note}
                 onChange={(e) => onChangeCustomer({ note: e.target.value })}
+                slotProps={{ input: { sx: { borderRadius: 2 } } }}
                 fullWidth
                 multiline
                 minRows={2}
               />
             </Stack>
 
-            <Divider />
-
-            <Stack direction="row" justifyContent="space-between">
-              <Typography variant="subtitle1">ยอดรวมทั้งหมด</Typography>
-              <Typography variant="h6" color="primary.main">
-                {total} บาท
-              </Typography>
-            </Stack>
-
-            <Button
-              variant="contained"
-              size="large"
-              disabled={!canConfirm}
-              loading={submitting}
-              onClick={onConfirm}
-              startIcon={<Iconify icon="solar:check-circle-bold" />}
-            >
-              ยืนยันสั่งอาหาร
-            </Button>
+            {!shopOpen && (
+              <Stack
+                direction="row"
+                spacing={1}
+                alignItems="center"
+                sx={{ p: 1.5, borderRadius: 2, color: 'error.main', bgcolor: 'error.lighter' }}
+              >
+                <Iconify icon="solar:close-circle-bold" width={20} />
+                <Typography variant="body2">ร้านปิดอยู่ในขณะนี้ ไม่สามารถสั่งอาหารได้</Typography>
+              </Stack>
+            )}
           </>
         )}
       </Stack>
+
+      {lines.length > 0 && (
+        <Box
+          sx={{
+            px: 2,
+            pt: 1.5,
+            pb: 'max(16px, env(safe-area-inset-bottom))',
+            borderTop: '1px solid',
+            borderColor: 'grey.200',
+            bgcolor: 'common.white',
+            boxShadow: '0 -8px 24px rgba(69,37,20,0.07)',
+          }}
+        >
+          <Stack
+            direction="row"
+            alignItems="flex-end"
+            justifyContent="space-between"
+            sx={{ mb: 1.25 }}
+          >
+            <Box>
+              <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+                ยอดรวมสุทธิ
+              </Typography>
+              <Typography variant="caption" sx={{ display: 'block', color: 'text.secondary' }}>
+                รวม {totalQuantity} ชิ้น
+              </Typography>
+            </Box>
+            <Typography variant="h4" sx={{ color: 'primary.main', lineHeight: 1 }}>
+              ฿{total.toLocaleString('th-TH')}
+            </Typography>
+          </Stack>
+          <Button
+            fullWidth
+            variant="contained"
+            size="large"
+            disabled={!canConfirm}
+            loading={submitting}
+            onClick={onConfirm}
+            startIcon={<Iconify icon="solar:check-circle-bold" />}
+            sx={{
+              minHeight: 52,
+              borderRadius: 2.5,
+              background: canConfirm
+                ? 'linear-gradient(135deg, #8B1111 0%, #C62828 100%)'
+                : undefined,
+              boxShadow: canConfirm ? '0 10px 22px rgba(113,17,17,0.24)' : 'none',
+            }}
+          >
+            {shopOpen ? 'ยืนยันสั่งอาหาร' : 'ร้านปิดอยู่ขณะนี้'}
+          </Button>
+          {!canConfirm && shopOpen && (
+            <Typography
+              variant="caption"
+              sx={{ mt: 0.75, display: 'block', color: 'text.secondary', textAlign: 'center' }}
+            >
+              กรุณากรอกชื่อและข้อมูลการรับอาหารให้ครบ
+            </Typography>
+          )}
+        </Box>
+      )}
     </Drawer>
   );
 }

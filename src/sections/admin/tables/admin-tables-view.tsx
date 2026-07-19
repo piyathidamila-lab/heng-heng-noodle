@@ -14,6 +14,7 @@ import Typography from '@mui/material/Typography';
 
 import { toast } from 'src/components/snackbar';
 import { Iconify } from 'src/components/iconify';
+import { useConfirmDialog } from 'src/components/custom-dialog';
 
 import { moveTable, createTable, deleteTable } from './table-actions';
 
@@ -29,6 +30,7 @@ export function AdminTablesView({ initialTables }: Props) {
   const [creating, setCreating] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [origin, setOrigin] = useState('');
+  const { confirm, dialog } = useConfirmDialog();
 
   useEffect(() => {
     setOrigin(window.location.origin);
@@ -50,7 +52,11 @@ export function AdminTablesView({ initialTables }: Props) {
   };
 
   const handleDelete = async (table: RestaurantTable) => {
-    if (!window.confirm(`ลบโต๊ะ "${table.label}" ใช่หรือไม่?`)) return;
+    const confirmed = await confirm({
+      content: `ลบโต๊ะ "${table.label}" ใช่หรือไม่?`,
+      confirmLabel: 'ลบ',
+    });
+    if (!confirmed) return;
 
     setBusyId(table.id);
     try {
@@ -221,6 +227,8 @@ export function AdminTablesView({ initialTables }: Props) {
           })}
         </Box>
       )}
+
+      {dialog}
     </Box>
   );
 }

@@ -109,6 +109,9 @@ create table if not exists public.shop_settings (
   custom_order_enabled boolean not null default true,
   custom_order_title text not null default 'ความอร่อยเลือกเองได้',
   custom_order_steps jsonb not null default '[{"id":"noodle","title":"เลือกเส้น","options":[{"id":"noodle-1","label":"เส้นเล็ก","price":0},{"id":"noodle-2","label":"เส้นใหญ่","price":0},{"id":"noodle-3","label":"เส้นหมี่","price":0},{"id":"noodle-4","label":"วุ้นเส้น","price":0},{"id":"noodle-5","label":"มาม่า","price":0},{"id":"noodle-6","label":"บะหมี่","price":0}]},{"id":"topping","title":"เลือกเครื่อง","options":[{"id":"topping-1","label":"ลูกชิ้น","price":0},{"id":"topping-2","label":"หมูสด","price":0},{"id":"topping-3","label":"หมูเปื่อย","price":0},{"id":"topping-4","label":"ตับ","price":0}]},{"id":"size","title":"เลือกความจุใจ","options":[{"id":"size-1","label":"จุก","price":40},{"id":"size-2","label":"แน่น","price":50},{"id":"size-3","label":"แน่น...แน่น","price":60}]}]'::jsonb,
+  announcement_enabled boolean not null default false,
+  announcement_message text not null default '',
+  is_open boolean not null default true,
   updated_at timestamptz not null default now()
 );
 
@@ -116,6 +119,13 @@ create table if not exists public.shop_settings (
 alter table public.shop_settings add column if not exists custom_order_enabled boolean not null default true;
 alter table public.shop_settings add column if not exists custom_order_title text not null default 'ความอร่อยเลือกเองได้';
 alter table public.shop_settings add column if not exists custom_order_steps jsonb not null default '[{"id":"noodle","title":"เลือกเส้น","options":[{"id":"noodle-1","label":"เส้นเล็ก","price":0},{"id":"noodle-2","label":"เส้นใหญ่","price":0},{"id":"noodle-3","label":"เส้นหมี่","price":0},{"id":"noodle-4","label":"วุ้นเส้น","price":0},{"id":"noodle-5","label":"มาม่า","price":0},{"id":"noodle-6","label":"บะหมี่","price":0}]},{"id":"topping","title":"เลือกเครื่อง","options":[{"id":"topping-1","label":"ลูกชิ้น","price":0},{"id":"topping-2","label":"หมูสด","price":0},{"id":"topping-3","label":"หมูเปื่อย","price":0},{"id":"topping-4","label":"ตับ","price":0}]},{"id":"size","title":"เลือกความจุใจ","options":[{"id":"size-1","label":"จุก","price":40},{"id":"size-2","label":"แน่น","price":50},{"id":"size-3","label":"แน่น...แน่น","price":60}]}]'::jsonb;
+
+-- Re-running this schema upgrades databases created before the shop-closed announcement banner existed.
+alter table public.shop_settings add column if not exists announcement_enabled boolean not null default false;
+alter table public.shop_settings add column if not exists announcement_message text not null default '';
+
+-- Re-running this schema upgrades databases created before the เปิดร้าน/ปิดร้าน toggle existed.
+alter table public.shop_settings add column if not exists is_open boolean not null default true;
 
 insert into public.shop_settings (id) values (true) on conflict (id) do nothing;
 
@@ -253,6 +263,66 @@ values
   ('drink', 'น้ำอัดลม', 'โค้ก / สไปรท์ / แฟนต้า เย็นสดชื่น', 15, '🥤', 3),
   ('drink', 'น้ำเปล่า', 'น้ำดื่มบรรจุขวด เย็นสดชื่น', 10, '💧', 4)
 on conflict (category, name) do nothing;
+
+-- ----------------------------------------------------------------------
+-- admin_users — accounts for the admin dashboard and staff (front-of-house)
+-- login, replacing the old single shared-password ADMIN_AUTH_SECRET /
+-- STAFF_AUTH_SECRET env vars. Passwords are hashed application-side
+-- (scrypt, see src/lib/password.ts) before being stored here — this table
+-- never sees a plaintext password.
+-- ----------------------------------------------------------------------
+
+create table if not exists public.admin_users (
+  id uuid primary key default gen_random_uuid(),
+  username text not null unique,
+  password_hash text not null,
+  display_name text not null default '',
+  role text not null check (role in ('admin', 'staff')),
+  is_active boolean not null default true,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+alter table public.admin_users enable row level security;
+-- No policies for anon/authenticated: accounts contain password hashes and
+-- are only ever read/written from the server via the service-role key.
+
+drop trigger if exists admin_users_set_updated_at on public.admin_users;
+create trigger admin_users_set_updated_at
+  before update on public.admin_users
+  for each row
+  execute function public.set_updated_at();
+
+-- Seed one default admin account so the dashboard is reachable right after
+-- this migration runs. Password is "changeme123" — sign in and change it
+-- (or create your own admin account and delete this one) from
+-- จัดการผู้ใช้งาน immediately.
+insert into public.admin_users (username, password_hash, display_name, role)
+values (
+  'admin',
+  '7e18998609794a0fcb1ce0125ac285e1:2d70b18c495cd2f694f326b1fbc2870fc851d2277e95e913f3b971bac4bc6ffd5fe6a6b88d858bef3f3c0a3fb96ac84fdb0080fdddfc3f1353f0189fc120013e',
+  'ผู้ดูแลระบบ',
+  'admin'
+)
+on conflict (username) do nothing;
+
+-- ----------------------------------------------------------------------
+-- admin_sessions — bearer tokens for logged-in admin_users. The session
+-- cookie holds this row's id; deleting the row (logout, or an admin
+-- deactivating/deleting the account) invalidates it immediately.
+-- ----------------------------------------------------------------------
+
+create table if not exists public.admin_sessions (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references public.admin_users (id) on delete cascade,
+  expires_at timestamptz not null,
+  created_at timestamptz not null default now()
+);
+
+alter table public.admin_sessions enable row level security;
+-- No policies for anon/authenticated: server-only via the service-role key.
+
+create index if not exists admin_sessions_user_id_idx on public.admin_sessions (user_id);
 
 -- ----------------------------------------------------------------------
 -- storage bucket for menu item photos

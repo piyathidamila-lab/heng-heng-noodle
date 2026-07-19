@@ -175,7 +175,7 @@ export function WorkspacesPopover({ data = [], sx, ...other }: WorkspacesPopover
 
   return (
     <>
-      {renderButton()}
+      {/* {renderButton()} */}
       {renderMenuList()}
     </>
   );

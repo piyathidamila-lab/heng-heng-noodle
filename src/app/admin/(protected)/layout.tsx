@@ -1,8 +1,10 @@
 import { redirect } from 'next/navigation';
 
-import { isAdminAuthenticated } from 'src/lib/admin-session';
+import { getCurrentUser } from 'src/lib/auth-session';
+import { getShopSettings } from 'src/lib/shop-settings-service';
 import { DashboardLayout, DashboardContent } from 'src/layouts/dashboard';
 
+import { AdminNavUser } from 'src/sections/admin/layout/admin-nav-user';
 import { adminNavData } from 'src/sections/admin/layout/admin-nav-config';
 import { AdminHeaderActions } from 'src/sections/admin/layout/admin-header-actions';
 
@@ -13,16 +15,37 @@ type Props = {
 };
 
 export default async function Layout({ children }: Props) {
-  if (!(await isAdminAuthenticated())) {
-    redirect('/admin/login');
+  const user = await getCurrentUser();
+
+  if (!user || user.role !== 'admin') {
+    redirect('/login');
   }
+
+  const settings = await getShopSettings();
 
   return (
     <DashboardLayout
       layoutQuery="md"
       slotProps={{
-        nav: { data: adminNavData },
-        header: { slots: { rightArea: <AdminHeaderActions /> } },
+        nav: {
+          data: adminNavData,
+          slots: {
+            bottomArea: (
+              <AdminNavUser
+                displayName={user.displayName}
+                username={user.username}
+                role={user.role}
+              />
+            ),
+          },
+        },
+        header: {
+          slots: {
+            rightArea: (
+              <AdminHeaderActions displayName={user.displayName} initialIsOpen={settings.isOpen} />
+            ),
+          },
+        },
       }}
     >
       {/*

@@ -4,7 +4,7 @@ import type { MenuCategory } from 'src/lib/category-service';
 
 import { revalidatePath } from 'next/cache';
 
-import { requireAdmin } from 'src/lib/admin-session';
+import { requireAdmin } from 'src/lib/auth-session';
 import {
   getCategories,
   moveCategoryRecord,

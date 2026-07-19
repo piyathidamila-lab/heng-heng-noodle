@@ -11,7 +11,7 @@ export default function Layout({ children }: Props) {
         minHeight: '100dvh',
         display: 'flex',
         justifyContent: 'center',
-        bgcolor: { xs: 'common.white', sm: 'grey.200' },
+        bgcolor: '#ffffff',
       }}
     >
       <Box

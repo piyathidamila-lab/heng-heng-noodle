@@ -7,6 +7,7 @@ import type { MenuCategory } from 'src/lib/category-service';
 import type { RestaurantTable } from 'src/lib/table-service';
 import type { ShopSettings, CustomOrderSelection } from 'src/lib/shop-settings-service';
 
+import { RiBookOpenLine } from '@remixicon/react';
 import { useMemo, useState, useLayoutEffect } from 'react';
 
 import Box from '@mui/material/Box';
@@ -16,6 +17,7 @@ import Tabs from '@mui/material/Tabs';
 import Stack from '@mui/material/Stack';
 import Badge from '@mui/material/Badge';
 import Button from '@mui/material/Button';
+import ButtonBase from '@mui/material/ButtonBase';
 import IconButton from '@mui/material/IconButton';
 import Typography from '@mui/material/Typography';
 
@@ -117,6 +119,10 @@ export function OrderView({ items, categories, bestSellers, tables, shop }: Prop
     : customer;
 
   const handleAdd = (id: string) => {
+    if (!shop.isOpen) {
+      toast.error('ร้านปิดอยู่ขณะนี้ ไม่สามารถสั่งอาหารได้');
+      return;
+    }
     if (id.startsWith('custom-')) {
       setCustomLines((prev) =>
         prev.map((line) => (line.item.id === id ? { ...line, quantity: line.quantity + 1 } : line))
@@ -144,6 +150,10 @@ export function OrderView({ items, categories, bestSellers, tables, shop }: Prop
     labels: string[],
     price: number
   ) => {
+    if (!shop.isOpen) {
+      toast.error('ร้านปิดอยู่ขณะนี้ ไม่สามารถสั่งอาหารได้');
+      return;
+    }
     const id = `custom-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     setCustomLines((prev) => [
       ...prev,
@@ -272,59 +282,122 @@ export function OrderView({ items, categories, bestSellers, tables, shop }: Prop
   }
 
   return (
-    <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', pb: totalQuantity ? 11 : 3 }}>
+    <Box
+      sx={{
+        flex: 1,
+        display: 'flex',
+        flexDirection: 'column',
+        pb: totalQuantity ? 11 : 3,
+        bgcolor: '#FBF8F4',
+      }}
+    >
       <Box
         sx={{
+          position: 'relative',
+          overflow: 'hidden',
           px: 2.5,
-          py: 3,
+          pt: 3,
+          pb: qrTable ? 0 : 5,
           color: 'common.white',
-          bgcolor: 'primary.main',
+          background: 'linear-gradient(145deg, #721111 0%, #A91D1D 55%, #C12C22 100%)',
         }}
       >
-        <Stack direction="row" alignItems="flex-start" justifyContent="space-between">
-          <Stack spacing={2} direction="row" alignItems="flex-start">
-            <Logo sx={{ width: 60, height: 60 }} />
-            <Stack>
-              <Typography variant="h5">{shop.name}</Typography>
-              <Typography variant="body2" sx={{ mt: 0.5, opacity: 0.8 }}>
-                {shop.address} · สั่งอาหารได้เลย ไม่ต้องเข้าสู่ระบบ
+        <Box
+          sx={{
+            position: 'absolute',
+            width: 180,
+            height: 180,
+            top: -100,
+            right: -70,
+            borderRadius: '50%',
+            bgcolor: 'rgba(255,255,255,0.07)',
+          }}
+        />
+        <Box
+          sx={{
+            position: 'absolute',
+            width: 100,
+            height: 100,
+            bottom: -60,
+            left: -35,
+            borderRadius: '50%',
+            bgcolor: 'rgba(255,213,79,0.10)',
+          }}
+        />
+
+        <Stack
+          direction="row"
+          alignItems="center"
+          justifyContent="space-between"
+          sx={{ position: 'relative' }}
+        >
+          <Stack spacing={1.5} direction="row" alignItems="center" sx={{ minWidth: 0 }}>
+            <Box
+              sx={{
+                width: 54,
+                height: 54,
+                p: 0.75,
+                flexShrink: 0,
+                borderRadius: 2.25,
+                bgcolor: 'common.white',
+                boxShadow: '0 8px 24px rgba(63,0,0,0.22)',
+              }}
+            >
+              <Logo sx={{ width: 1, height: 1 }} />
+            </Box>
+            <Box sx={{ minWidth: 0 }}>
+              <Typography variant="h5" noWrap>
+                {shop.name}
               </Typography>
-              {qrTable && (
-                <Stack direction="row" alignItems="center" spacing={1} sx={{ mt: 0.5 }}>
-                  <Typography variant="body2" sx={{ opacity: 0.8 }}>
-                    โต๊ะ {qrTable} · สวัสดีคุณ {tableName}
-                  </Typography>
-                </Stack>
-              )}
-            </Stack>
+              <Chip
+                size="small"
+                label={shop.isOpen ? 'เปิดรับออเดอร์' : 'ร้านปิดอยู่'}
+                sx={{
+                  mt: 0.5,
+                  height: 24,
+                  color: 'common.white',
+                  fontWeight: 700,
+                  bgcolor: shop.isOpen ? 'rgba(20,155,93,0.92)' : 'rgba(40,40,40,0.45)',
+                  '& .MuiChip-label': { px: 1 },
+                }}
+              />
+            </Box>
           </Stack>
 
           {!qrTable && (
             <IconButton
               onClick={() => setShowHistory(true)}
-              sx={{ color: 'common.white', mt: -0.5, mr: -1 }}
+              sx={{
+                color: 'common.white',
+                bgcolor: 'rgba(255,255,255,0.12)',
+                '&:hover': { bgcolor: 'rgba(255,255,255,0.20)' },
+              }}
               aria-label="ประวัติการสั่งซื้อ"
             >
-              <Iconify icon="solar:notebook-bold-duotone" width={22} />
+              <RiBookOpenLine />
             </IconButton>
           )}
         </Stack>
 
-        {!qrTable && (
-          <Button
-            variant="outlined"
-            size="small"
-            onClick={() => setScannerOpen(true)}
-            startIcon={<Iconify icon={'solar:qr-code-bold' as IconifyName} width={18} />}
-            sx={{
-              mt: 1.5,
-              color: 'common.white',
-              borderColor: 'rgba(255,255,255,0.5)',
-              '&:hover': { borderColor: 'common.white', bgcolor: 'rgba(255,255,255,0.08)' },
-            }}
+        <Typography
+          variant="body2"
+          sx={{ mt: 2, position: 'relative', opacity: 0.82, lineHeight: 1.6 }}
+        >
+          {shop.address}
+        </Typography>
+
+        {qrTable && (
+          <Stack
+            direction="row"
+            alignItems="center"
+            spacing={1}
+            sx={{ mt: 1.25, position: 'relative' }}
           >
-            สแกน QR โต๊ะ
-          </Button>
+            <Box sx={{ width: 7, height: 7, borderRadius: '50%', bgcolor: 'secondary.main' }} />
+            <Typography variant="body2" sx={{ opacity: 0.9 }}>
+              โต๊ะ {qrTable} · สวัสดีคุณ {tableName}
+            </Typography>
+          </Stack>
         )}
 
         {qrTable && (
@@ -335,6 +408,7 @@ export function OrderView({ items, categories, bestSellers, tables, shop }: Prop
             sx={{
               mt: 2,
               minHeight: 36,
+              position: 'relative',
               '& .MuiTabs-indicator': { bgcolor: 'secondary.main' },
             }}
           >
@@ -344,6 +418,128 @@ export function OrderView({ items, categories, bestSellers, tables, shop }: Prop
         )}
       </Box>
 
+      {!qrTable && (
+        <Box sx={{ px: 2.5, mt: -2.5, position: 'relative', zIndex: 1 }}>
+          <Stack
+            direction="row"
+            sx={{
+              overflow: 'hidden',
+              borderRadius: 3,
+              bgcolor: 'common.white',
+              border: '1px solid',
+              borderColor: 'grey.200',
+              boxShadow: '0 10px 28px rgba(69,37,20,0.10)',
+            }}
+          >
+            <ButtonBase
+              onClick={() => setScannerOpen(true)}
+              sx={{ flex: 1, p: 1.75, textAlign: 'left', justifyContent: 'flex-start' }}
+            >
+              <Stack direction="row" spacing={1.25} alignItems="center">
+                <Box
+                  sx={{
+                    width: 40,
+                    height: 40,
+                    display: 'grid',
+                    flexShrink: 0,
+                    placeItems: 'center',
+                    borderRadius: 2,
+                    color: 'primary.main',
+                    bgcolor: 'primary.lighter',
+                  }}
+                >
+                  <Iconify icon={'solar:qr-code-bold' as IconifyName} width={22} />
+                </Box>
+                <Box>
+                  <Typography variant="subtitle2">สแกน QR</Typography>
+                  <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+                    สั่งที่โต๊ะ
+                  </Typography>
+                </Box>
+              </Stack>
+            </ButtonBase>
+
+            <Box sx={{ width: '1px', my: 1.5, bgcolor: 'grey.200' }} />
+
+            <ButtonBase
+              onClick={() => router.push('/tables')}
+              sx={{ flex: 1, p: 1.75, textAlign: 'left', justifyContent: 'flex-start' }}
+            >
+              <Stack direction="row" spacing={1.25} alignItems="center">
+                <Box
+                  sx={{
+                    width: 40,
+                    height: 40,
+                    display: 'grid',
+                    flexShrink: 0,
+                    placeItems: 'center',
+                    borderRadius: 2,
+                    bgcolor: '#FFF2D6',
+                    fontSize: 21,
+                  }}
+                >
+                  🪑
+                </Box>
+                <Box>
+                  <Typography variant="subtitle2">ดูโต๊ะว่าง</Typography>
+                  <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+                    เช็กสถานะ
+                  </Typography>
+                </Box>
+              </Stack>
+            </ButtonBase>
+          </Stack>
+        </Box>
+      )}
+
+      {!shop.isOpen && (
+        <Stack
+          direction="row"
+          spacing={1}
+          sx={{
+            mx: 2.5,
+            mt: 2,
+            p: 1.5,
+            borderRadius: 2,
+            bgcolor: 'error.lighter',
+            color: 'error.darker',
+          }}
+        >
+          <Iconify
+            icon={'solar:forbidden-circle-bold' as IconifyName}
+            width={20}
+            sx={{ flexShrink: 0, mt: 0.1 }}
+          />
+          <Typography variant="body2">
+            ร้านปิดอยู่ในขณะนี้ ดูเมนูได้ตามปกติ แต่ยังไม่สามารถสั่งอาหารได้
+          </Typography>
+        </Stack>
+      )}
+
+      {shop.announcement.enabled && shop.announcement.message.trim() && (
+        <Stack
+          direction="row"
+          spacing={1}
+          sx={{
+            mx: 2.5,
+            mt: 2,
+            p: 1.5,
+            borderRadius: 2,
+            bgcolor: 'warning.lighter',
+            color: 'warning.darker',
+          }}
+        >
+          <Iconify
+            icon={'solar:danger-triangle-bold' as IconifyName}
+            width={20}
+            sx={{ flexShrink: 0, mt: 0.1 }}
+          />
+          <Typography variant="body2" sx={{ whiteSpace: 'pre-line' }}>
+            {shop.announcement.message}
+          </Typography>
+        </Stack>
+      )}
+
       {view === 'orders' && qrTable ? (
         <TableOrdersPanel table={qrTable} currentName={tableName ?? ''} />
       ) : (
@@ -351,83 +547,191 @@ export function OrderView({ items, categories, bestSellers, tables, shop }: Prop
           <BestSellerStrip items={bestSellers} quantities={quantities} onAdd={handleAdd} />
 
           {shop.customOrder.enabled && shop.customOrder.steps.length > 0 && (
-            <Box sx={{ px: 2.5 }}>
-              <Stack
-                direction="row"
-                alignItems="center"
-                spacing={1.5}
+            <Box sx={{ px: 2.5, pb: 0.5 }}>
+              <ButtonBase
+                onClick={() => setCustomOrderOpen(true)}
+                aria-label={`เริ่มสร้างเมนู ${shop.customOrder.title}`}
                 sx={{
-                  p: 2,
-                  borderRadius: 2.5,
+                  position: 'relative',
+                  overflow: 'hidden',
+                  width: 1,
+                  p: 2.25,
+                  display: 'block',
+                  textAlign: 'left',
+                  borderRadius: 3,
                   color: 'common.white',
-                  background: 'linear-gradient(135deg, #8B1111 0%, #C62828 100%)',
-                  // boxShadow: '0 10px 24px rgba(139, 17, 17, 0.20)',
+                  background: 'linear-gradient(135deg, #67100E 0%, #9E1B16 55%, #D25125 100%)',
+                  boxShadow: 'none',
                 }}
               >
                 <Box
                   sx={{
-                    width: 52,
-                    height: 52,
-                    flexShrink: 0,
-                    display: 'grid',
-                    placeItems: 'center',
+                    position: 'absolute',
+                    width: 150,
+                    height: 150,
+                    top: -80,
+                    right: -40,
                     borderRadius: '50%',
-                    bgcolor: 'rgba(255,255,255,0.14)',
-                    fontSize: 28,
+                    bgcolor: 'rgba(255,255,255,0.08)',
                   }}
-                >
-                  🍜
-                </Box>
-                <Box sx={{ flex: 1, minWidth: 0 }}>
-                  <Typography variant="h6" sx={{ color: '#FFD54F' }}>
-                    {shop.customOrder.title}
-                  </Typography>
-                  <Typography variant="caption" sx={{ opacity: 0.82 }}>
-                    เลือกเส้น เครื่อง และขนาดได้ตามใจคุณ
-                  </Typography>
-                </Box>
-                <Button
-                  variant="contained"
-                  color="inherit"
-                  onClick={() => setCustomOrderOpen(true)}
-                  endIcon={<Iconify icon="solar:double-alt-arrow-right-bold-duotone" width={18} />}
+                />
+                <Box
                   sx={{
-                    flexShrink: 0,
-                    color: '#7A1010',
-                    bgcolor: 'common.white',
-                    '&:hover': { bgcolor: 'grey.100' },
+                    position: 'absolute',
+                    width: 90,
+                    height: 90,
+                    bottom: -55,
+                    left: -25,
+                    borderRadius: '50%',
+                    bgcolor: 'rgba(255,213,79,0.10)',
                   }}
+                />
+
+                <Stack direction="row" justifyContent="space-between" sx={{ position: 'relative' }}>
+                  <Box>
+                    <Stack direction="row" spacing={0.75} alignItems="center">
+                      <Box component="span" sx={{ fontSize: 18, lineHeight: 1 }}>
+                        ✨
+                      </Box>
+                      <Typography
+                        variant="overline"
+                        sx={{ color: '#FFD976', fontWeight: 800, letterSpacing: 0.8 }}
+                      >
+                        สร้างเมนูในแบบคุณ
+                      </Typography>
+                    </Stack>
+                    <Typography variant="h5" sx={{ mt: 0.5, color: 'common.white' }}>
+                      {shop.customOrder.title}
+                    </Typography>
+                    <Typography variant="body2" sx={{ mt: 0.75, maxWidth: 260, opacity: 0.82 }}>
+                      เลือกทุกอย่างได้ตามใจ อร่อยในแบบที่เป็นคุณ
+                    </Typography>
+                  </Box>
+
+                  <Box
+                    sx={{
+                      width: 58,
+                      height: 58,
+                      display: 'grid',
+                      flexShrink: 0,
+                      placeItems: 'center',
+                      borderRadius: '50%',
+                      bgcolor: 'rgba(255,255,255,0.14)',
+                      fontSize: 31,
+                    }}
+                  >
+                    🍜
+                  </Box>
+                </Stack>
+
+                {/* <Stack
+                  direction="row"
+                  spacing={0.75}
+                  sx={{ mt: 2, position: 'relative', overflow: 'hidden' }}
                 >
-                  เลือกเลย
-                </Button>
-              </Stack>
+                  {shop.customOrder.steps.slice(0, 3).map((step, index) => (
+                    <Stack
+                      key={step.id}
+                      direction="row"
+                      spacing={0.5}
+                      alignItems="center"
+                      sx={{
+                        minWidth: 0,
+                        px: 0.9,
+                        py: 0.55,
+                        borderRadius: 1.5,
+                        bgcolor: 'rgba(255,255,255,0.12)',
+                      }}
+                    >
+                      <Box
+                        sx={{
+                          width: 18,
+                          height: 18,
+                          display: 'grid',
+                          flexShrink: 0,
+                          placeItems: 'center',
+                          borderRadius: '50%',
+                          color: '#7A1010',
+                          bgcolor: '#FFD976',
+                          fontSize: 10,
+                          fontWeight: 800,
+                        }}
+                      >
+                        {index + 1}
+                      </Box>
+                      <Typography variant="caption" noWrap sx={{ fontWeight: 700 }}>
+                        {step.title}
+                      </Typography>
+                    </Stack>
+                  ))}
+                </Stack> */}
+
+                <Stack
+                  direction="row"
+                  alignItems="center"
+                  justifyContent="space-between"
+                  sx={{ mt: 2, position: 'relative' }}
+                >
+                  <Typography variant="caption" sx={{ opacity: 0.72 }}>
+                    ทั้งหมด {shop.customOrder.steps.length} ขั้นตอน
+                  </Typography>
+                  <Stack
+                    direction="row"
+                    spacing={0.5}
+                    alignItems="center"
+                    sx={{
+                      px: 1.25,
+                      py: 0.7,
+                      borderRadius: 2,
+                      color: '#7A1010',
+                      bgcolor: 'common.white',
+                    }}
+                  >
+                    <Typography variant="subtitle2">เริ่มเลือกเลย</Typography>
+                    <Iconify icon="solar:double-alt-arrow-right-bold-duotone" width={17} />
+                  </Stack>
+                </Stack>
+              </ButtonBase>
             </Box>
           )}
 
-          <Stack
-            direction="row"
-            spacing={1}
+          <Box
             sx={{
-              px: 2.5,
-              py: 2,
               position: 'sticky',
               top: 0,
-              zIndex: 1,
-              bgcolor: 'common.white',
+              zIndex: 2,
+              pt: 2,
+              pb: 1.5,
+              bgcolor: 'rgba(251,248,244,0.96)',
               borderBottom: '1px solid',
               borderColor: 'grey.200',
+              backdropFilter: 'blur(8px)',
             }}
           >
-            {categories.map((category) => (
-              <Chip
-                key={category.value}
-                label={category.label}
-                onClick={() => setActiveCategory(category.value)}
-                color={activeCategory === category.value ? 'primary' : 'default'}
-                variant={activeCategory === category.value ? 'filled' : 'outlined'}
-              />
-            ))}
-          </Stack>
+            <Typography variant="h6" sx={{ px: 2.5, mb: 1.25 }}>
+              เมนูทั้งหมด
+            </Typography>
+            <Stack
+              direction="row"
+              spacing={1}
+              sx={{
+                px: 2.5,
+                overflowX: 'auto',
+                '&::-webkit-scrollbar': { display: 'none' },
+              }}
+            >
+              {categories.map((category) => (
+                <Chip
+                  key={category.value}
+                  label={category.label}
+                  onClick={() => setActiveCategory(category.value)}
+                  color={activeCategory === category.value ? 'primary' : 'default'}
+                  variant={activeCategory === category.value ? 'filled' : 'outlined'}
+                  sx={{ height: 38, flexShrink: 0, fontWeight: 600 }}
+                />
+              ))}
+            </Stack>
+          </Box>
 
           <Stack spacing={1.5} sx={{ px: 2.5, py: 2 }}>
             {visibleItems.length === 0 ? (
@@ -471,7 +775,10 @@ export function OrderView({ items, categories, bestSellers, tables, shop }: Prop
             sx={{
               maxWidth: 432,
               pointerEvents: 'auto',
-              boxShadow: '0 12px 24px rgba(0,0,0,0.24)',
+              minHeight: 54,
+              borderRadius: 2.5,
+              background: 'linear-gradient(135deg, #8B1111 0%, #C62828 100%)',
+              boxShadow: '0 12px 28px rgba(113,17,17,0.30)',
             }}
             startIcon={
               <Badge badgeContent={totalQuantity} color="secondary">
@@ -492,6 +799,7 @@ export function OrderView({ items, categories, bestSellers, tables, shop }: Prop
         submitting={submitting}
         qrMode={!!qrTable}
         tables={tables}
+        shopOpen={shop.isOpen}
         onAdd={handleAdd}
         onRemove={handleRemove}
         customer={effectiveCustomer}

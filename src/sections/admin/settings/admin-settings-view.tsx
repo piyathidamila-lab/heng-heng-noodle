@@ -1,6 +1,6 @@
 'use client';
 
-import type { ShopSettings, CustomOrderOption } from 'src/lib/shop-settings-service';
+import type { ShopSettings } from 'src/lib/shop-settings-service';
 
 import { useState } from 'react';
 
@@ -10,7 +10,6 @@ import Switch from '@mui/material/Switch';
 import Button from '@mui/material/Button';
 import Divider from '@mui/material/Divider';
 import TextField from '@mui/material/TextField';
-import IconButton from '@mui/material/IconButton';
 import Typography from '@mui/material/Typography';
 
 import { toast } from 'src/components/snackbar';
@@ -43,72 +42,6 @@ export function AdminSettingsView({ initialSettings }: Props) {
     } finally {
       setSaving(false);
     }
-  };
-
-  const handleStepTitleChange = (stepIndex: number, title: string) => {
-    handleChange({
-      customOrder: {
-        ...form.customOrder,
-        steps: form.customOrder.steps.map((step, index) =>
-          index === stepIndex ? { ...step, title } : step
-        ),
-      },
-    });
-  };
-
-  const handleOptionChange = (
-    stepIndex: number,
-    optionIndex: number,
-    patch: Partial<CustomOrderOption>
-  ) => {
-    handleChange({
-      customOrder: {
-        ...form.customOrder,
-        steps: form.customOrder.steps.map((step, index) =>
-          index === stepIndex
-            ? {
-                ...step,
-                options: step.options.map((option, currentOptionIndex) =>
-                  currentOptionIndex === optionIndex ? { ...option, ...patch } : option
-                ),
-              }
-            : step
-        ),
-      },
-    });
-  };
-
-  const handleAddOption = (stepIndex: number) => {
-    const option: CustomOrderOption = {
-      id: `option-${Date.now()}`,
-      label: '',
-      price: 0,
-    };
-
-    handleChange({
-      customOrder: {
-        ...form.customOrder,
-        steps: form.customOrder.steps.map((step, index) =>
-          index === stepIndex ? { ...step, options: [...step.options, option] } : step
-        ),
-      },
-    });
-  };
-
-  const handleDeleteOption = (stepIndex: number, optionIndex: number) => {
-    handleChange({
-      customOrder: {
-        ...form.customOrder,
-        steps: form.customOrder.steps.map((step, index) =>
-          index === stepIndex
-            ? {
-                ...step,
-                options: step.options.filter((_, currentIndex) => currentIndex !== optionIndex),
-              }
-            : step
-        ),
-      },
-    });
   };
 
   return (
@@ -168,134 +101,36 @@ export function AdminSettingsView({ initialSettings }: Props) {
 
         <Divider sx={{ my: 1 }} />
 
-        <Stack spacing={0.75}>
-          <Stack direction="row" alignItems="center" justifyContent="space-between">
-            <Box>
-              <Typography variant="h6">เมนูความอร่อยเลือกเอง</Typography>
-              <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-                ตั้งค่าตัวเลือกแบบทีละขั้นที่จะแสดงในหน้าสั่งอาหาร
-              </Typography>
-            </Box>
-            <Switch
-              checked={form.customOrder.enabled}
-              onChange={(event) =>
-                handleChange({
-                  customOrder: { ...form.customOrder, enabled: event.target.checked },
-                })
-              }
-              inputProps={{ 'aria-label': 'เปิดหรือปิดเมนูความอร่อยเลือกเอง' }}
-            />
-          </Stack>
+        <Stack direction="row" alignItems="center" justifyContent="space-between">
+          <Box>
+            <Typography variant="h6">ประกาศหน้าเว็บ</Typography>
+            <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+              เช่น แจ้งวันหยุดร้าน — ข้อความจะแสดงเป็นแถบเด่นด้านบนหน้าสั่งอาหารของลูกค้า
+            </Typography>
+          </Box>
+          <Switch
+            checked={form.announcement.enabled}
+            onChange={(event) =>
+              handleChange({
+                announcement: { ...form.announcement, enabled: event.target.checked },
+              })
+            }
+            inputProps={{ 'aria-label': 'เปิดหรือปิดประกาศหน้าเว็บ' }}
+          />
         </Stack>
 
         <TextField
-          label="ชื่อปุ่มที่ลูกค้าเห็น"
-          value={form.customOrder.title}
-          onChange={(event) =>
-            handleChange({
-              customOrder: { ...form.customOrder, title: event.target.value },
-            })
+          label="ข้อความประกาศ"
+          placeholder="เช่น ร้านหยุดวันที่ 1-2 มกราคม เนื่องในเทศกาลปีใหม่"
+          value={form.announcement.message}
+          onChange={(e) =>
+            handleChange({ announcement: { ...form.announcement, message: e.target.value } })
           }
-          disabled={!form.customOrder.enabled}
+          disabled={!form.announcement.enabled}
           fullWidth
+          multiline
+          minRows={2}
         />
-
-        <Box
-          sx={{
-            display: 'grid',
-            gap: 2,
-            gridTemplateColumns: { xs: '1fr', lg: 'repeat(3, minmax(0, 1fr))' },
-            opacity: form.customOrder.enabled ? 1 : 0.55,
-            pointerEvents: form.customOrder.enabled ? 'auto' : 'none',
-          }}
-        >
-          {form.customOrder.steps.map((step, stepIndex) => {
-            const isPriceStep = stepIndex === form.customOrder.steps.length - 1;
-
-            return (
-              <Stack
-                key={step.id}
-                spacing={1.5}
-                sx={{ p: 2, border: '1px solid', borderColor: 'divider', borderRadius: 2 }}
-              >
-                <Stack direction="row" spacing={1} alignItems="center">
-                  <Box
-                    sx={{
-                      width: 28,
-                      height: 28,
-                      borderRadius: '50%',
-                      display: 'grid',
-                      placeItems: 'center',
-                      typography: 'subtitle2',
-                      bgcolor: 'primary.main',
-                      color: 'common.white',
-                    }}
-                  >
-                    {stepIndex + 1}
-                  </Box>
-                  <Typography variant="subtitle1">ขั้นตอนที่ {stepIndex + 1}</Typography>
-                </Stack>
-
-                <TextField
-                  label="ชื่อขั้นตอน"
-                  size="small"
-                  value={step.title}
-                  onChange={(event) => handleStepTitleChange(stepIndex, event.target.value)}
-                  fullWidth
-                />
-
-                <Stack spacing={1}>
-                  {step.options.map((option, optionIndex) => (
-                    <Stack key={option.id} direction="row" spacing={0.75} alignItems="center">
-                      <TextField
-                        label={`ตัวเลือก ${optionIndex + 1}`}
-                        size="small"
-                        value={option.label}
-                        onChange={(event) =>
-                          handleOptionChange(stepIndex, optionIndex, { label: event.target.value })
-                        }
-                        fullWidth
-                      />
-                      {isPriceStep && (
-                        <TextField
-                          label="ราคา"
-                          type="number"
-                          size="small"
-                          value={option.price}
-                          onChange={(event) =>
-                            handleOptionChange(stepIndex, optionIndex, {
-                              price: Math.max(0, Number(event.target.value)),
-                            })
-                          }
-                          slotProps={{ htmlInput: { min: 0, step: 1 } }}
-                          sx={{ width: 100, flexShrink: 0 }}
-                        />
-                      )}
-                      <IconButton
-                        color="error"
-                        size="small"
-                        disabled={step.options.length <= 1}
-                        onClick={() => handleDeleteOption(stepIndex, optionIndex)}
-                        aria-label={`ลบ ${option.label || `ตัวเลือก ${optionIndex + 1}`}`}
-                      >
-                        <Iconify icon="solar:trash-bin-trash-bold" width={19} />
-                      </IconButton>
-                    </Stack>
-                  ))}
-                </Stack>
-
-                <Button
-                  variant="soft"
-                  size="small"
-                  startIcon={<Iconify icon="mingcute:add-line" />}
-                  onClick={() => handleAddOption(stepIndex)}
-                >
-                  เพิ่มตัวเลือก
-                </Button>
-              </Stack>
-            );
-          })}
-        </Box>
 
         <Button
           variant="contained"

@@ -1,10 +1,16 @@
 'use server';
 
-import type { OrderRecord, TableSessionSummary } from 'src/lib/order-service';
+import type {
+  OrderRecord,
+  BillSummary,
+  BillHistoryFilter,
+  TableSessionSummary,
+} from 'src/lib/order-service';
 
-import { requireAdmin } from 'src/lib/admin-session';
+import { requireOrderAccess } from 'src/lib/auth-session';
 import { getPromptPayPayload, PromptPayNotConfiguredError } from 'src/lib/promptpay';
 import {
+  getBillHistory,
   getOrdersBySession,
   getOpenTableSessions,
   closeTableSessionRecord,
@@ -13,12 +19,17 @@ import {
 // ----------------------------------------------------------------------
 
 export async function listOpenTableSessions(): Promise<TableSessionSummary[]> {
-  await requireAdmin();
+  await requireOrderAccess();
   return getOpenTableSessions();
 }
 
+export async function listBillHistoryAdmin(filter: BillHistoryFilter = {}): Promise<BillSummary[]> {
+  await requireOrderAccess();
+  return getBillHistory(filter);
+}
+
 export async function closeTableSession(id: string): Promise<void> {
-  await requireAdmin();
+  await requireOrderAccess();
   await closeTableSessionRecord(id);
 }
 
@@ -29,7 +40,7 @@ export type TableBill = {
 };
 
 export async function getTableBill(sessionId: string): Promise<TableBill> {
-  await requireAdmin();
+  await requireOrderAccess();
 
   const orders = await getOrdersBySession(sessionId);
   const total = orders.reduce((sum, order) => sum + order.total, 0);

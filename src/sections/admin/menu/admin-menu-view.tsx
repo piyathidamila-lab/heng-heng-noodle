@@ -18,6 +18,7 @@ import IconButton from '@mui/material/IconButton';
 import Typography from '@mui/material/Typography';
 
 import { Iconify } from 'src/components/iconify';
+import { useConfirmDialog } from 'src/components/custom-dialog';
 
 import { MenuItemFormDialog } from './menu-item-form-dialog';
 import { createMenuItem, deleteMenuItem, updateMenuItem } from './menu-actions';
@@ -35,6 +36,7 @@ export function AdminMenuView({ initialItems, categories }: Props) {
   const [editing, setEditing] = useState<MenuItem | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [activeCategory, setActiveCategory] = useState(categories[0]?.value ?? '');
+  const { confirm, dialog } = useConfirmDialog();
 
   const openCreate = () => {
     setEditing(null);
@@ -80,7 +82,12 @@ export function AdminMenuView({ initialItems, categories }: Props) {
   };
 
   const handleDelete = async (item: MenuItem) => {
-    if (!window.confirm(`ลบเมนู "${item.name}" ใช่หรือไม่?`)) return;
+    const confirmed = await confirm({
+      content: `ลบเมนู "${item.name}" ใช่หรือไม่?`,
+      confirmLabel: 'ลบ',
+    });
+    if (!confirmed) return;
+
     await deleteMenuItem(item.id, item.imageUrl);
     setItems((prev) => prev.filter((it) => it.id !== item.id));
   };
@@ -234,6 +241,8 @@ export function AdminMenuView({ initialItems, categories }: Props) {
         onClose={() => setDialogOpen(false)}
         onSubmit={handleSubmit}
       />
+
+      {dialog}
     </Box>
   );
 }

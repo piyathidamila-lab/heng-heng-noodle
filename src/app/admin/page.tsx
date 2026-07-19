@@ -1,9 +1,11 @@
 import { redirect } from 'next/navigation';
 
-import { isAdminAuthenticated } from 'src/lib/admin-session';
+import { getCurrentUser } from 'src/lib/auth-session';
 
 // ----------------------------------------------------------------------
 
 export default async function Page() {
-  redirect((await isAdminAuthenticated()) ? '/admin/overview' : '/admin/login');
+  const user = await getCurrentUser();
+
+  redirect(user?.role === 'admin' ? '/admin/overview' : '/login');
 }

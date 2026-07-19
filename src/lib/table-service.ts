@@ -9,6 +9,10 @@ export type RestaurantTable = {
   sortOrder: number;
 };
 
+export type RestaurantTableAvailability = RestaurantTable & {
+  status: 'available' | 'occupied';
+};
+
 export class TableValidationError extends Error {}
 
 const SELECT_COLUMNS = 'id, label, sort_order';
@@ -31,6 +35,28 @@ export async function getTables(): Promise<RestaurantTable[]> {
   if (error) throw error;
 
   return (data ?? []).map(mapRow);
+}
+
+/**
+ * Customer-safe table availability. Only the table label and whether it has
+ * an open session are exposed; order and diner details stay private.
+ */
+export async function getTableAvailability(): Promise<RestaurantTableAvailability[]> {
+  const [tables, sessionsResult] = await Promise.all([
+    getTables(),
+    getSupabaseAdmin().from('table_sessions').select('table_number').eq('status', 'open'),
+  ]);
+
+  if (sessionsResult.error) throw sessionsResult.error;
+
+  const occupiedTables = new Set(
+    (sessionsResult.data ?? []).map((session) => session.table_number)
+  );
+
+  return tables.map((table) => ({
+    ...table,
+    status: occupiedTables.has(table.label) ? 'occupied' : 'available',
+  }));
 }
 
 export async function createTableRecord(label: string): Promise<RestaurantTable> {

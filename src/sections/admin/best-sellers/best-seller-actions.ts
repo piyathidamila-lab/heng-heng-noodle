@@ -4,7 +4,7 @@ import type { MenuItem } from 'src/sections/order/menu-data';
 
 import { revalidatePath } from 'next/cache';
 
-import { requireAdmin } from 'src/lib/admin-session';
+import { requireAdmin } from 'src/lib/auth-session';
 import {
   addBestSellerRecord,
   moveBestSellerRecord,

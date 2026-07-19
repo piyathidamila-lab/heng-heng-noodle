@@ -12,8 +12,6 @@ import ButtonBase from '@mui/material/ButtonBase';
 
 import { fTime, fToNow } from 'src/utils/format-time';
 
-import { Iconify } from 'src/components/iconify';
-
 import { BillDialog } from './bill-dialog';
 import { listOpenTableSessions } from './table-session-actions';
 import { STATUS_COLOR, STATUS_LABEL } from './order-status-config';
@@ -48,10 +46,6 @@ export function OpenTablesPanel({ initialSessions }: Props) {
       clearInterval(interval);
     };
   }, []);
-
-  const handleTableClosed = (sessionId: string) => {
-    setSessions((prev) => prev.filter((item) => item.id !== sessionId));
-  };
 
   return (
     <Box sx={{ mb: 5, '@media print': { display: 'none' } }}>
@@ -114,24 +108,6 @@ export function OpenTablesPanel({ initialSessions }: Props) {
                     )
                   )}
                 </Stack>
-
-                <Stack
-                  direction="row"
-                  alignItems="center"
-                  justifyContent="center"
-                  spacing={1}
-                  sx={{
-                    py: 1,
-                    borderRadius: 1,
-                    border: '1px solid',
-                    borderColor: 'primary.main',
-                    color: 'primary.main',
-                    typography: 'button',
-                  }}
-                >
-                  <Iconify icon="solar:notes-bold-duotone" width={18} />
-                  <span>เช็คบิล</span>
-                </Stack>
               </Stack>
             </ButtonBase>
           ))}
@@ -140,8 +116,8 @@ export function OpenTablesPanel({ initialSessions }: Props) {
 
       <BillDialog
         session={activeSession}
+        variant="manage"
         onClose={() => setActiveSession(null)}
-        onTableClosed={handleTableClosed}
       />
     </Box>
   );

@@ -8,11 +8,11 @@ import Button from '@mui/material/Button';
 import Avatar from '@mui/material/Avatar';
 import Typography from '@mui/material/Typography';
 
-import { paths } from 'src/routes/paths';
-
 import { CONFIG } from 'src/global-config';
 
 import { Label } from 'src/components/label';
+
+import { adminLogoutAction } from 'src/sections/admin/layout/admin-actions';
 
 import { useMockedUser } from 'src/auth/hooks';
 
@@ -66,13 +66,8 @@ export function NavUpgrade({ sx, ...other }: BoxProps) {
           </Typography>
         </Box>
 
-        <Button
-          variant="contained"
-          href={paths.minimalStore}
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          Upgrade to Pro
+        <Button variant="contained" onClick={adminLogoutAction}>
+          ออกจากระบบ
         </Button>
       </Box>
     </Box>

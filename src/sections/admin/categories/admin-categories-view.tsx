@@ -13,6 +13,7 @@ import Typography from '@mui/material/Typography';
 
 import { toast } from 'src/components/snackbar';
 import { Iconify } from 'src/components/iconify';
+import { useConfirmDialog } from 'src/components/custom-dialog';
 
 import {
   moveCategory,
@@ -34,6 +35,7 @@ export function AdminCategoriesView({ initialCategories }: Props) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingLabel, setEditingLabel] = useState('');
   const [busyId, setBusyId] = useState<string | null>(null);
+  const { confirm, dialog } = useConfirmDialog();
 
   const handleCreate = async () => {
     if (!newLabel.trim()) return;
@@ -76,7 +78,11 @@ export function AdminCategoriesView({ initialCategories }: Props) {
   };
 
   const handleDelete = async (category: MenuCategory) => {
-    if (!window.confirm(`ลบหมวดหมู่ "${category.label}" ใช่หรือไม่?`)) return;
+    const confirmed = await confirm({
+      content: `ลบหมวดหมู่ "${category.label}" ใช่หรือไม่?`,
+      confirmLabel: 'ลบ',
+    });
+    if (!confirmed) return;
 
     setBusyId(category.id);
     try {
@@ -223,6 +229,8 @@ export function AdminCategoriesView({ initialCategories }: Props) {
           เพิ่มหมวดหมู่
         </Button>
       </Stack>
+
+      {dialog}
     </Box>
   );
 }

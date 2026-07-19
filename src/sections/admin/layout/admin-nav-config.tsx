@@ -34,14 +34,34 @@ export const adminNavData: NavSectionProps['data'] = [
         icon: <Iconify icon="solar:cart-3-bold" width={24} />,
       },
       {
+        title: 'ประวัติออเดอร์',
+        path: '/admin/order-history',
+        icon: <Iconify icon={'solar:history-bold' as IconifyName} width={24} />,
+      },
+      {
+        title: 'เช็คบิล',
+        path: '/admin/bills',
+        icon: <Iconify icon={'solar:bill-list-bold' as IconifyName} width={24} />,
+      },
+      {
         title: 'โต๊ะ',
         path: '/admin/tables',
         icon: <Iconify icon={'solar:qr-code-bold' as IconifyName} width={24} />,
       },
       {
+        title: 'เมนูความอร่อยเลือกเอง',
+        path: '/admin/custom-order',
+        icon: <Iconify icon={'solar:tuning-4-bold' as IconifyName} width={24} />,
+      },
+      {
         title: 'ข้อมูลร้านค้า',
         path: '/admin/settings',
         icon: <Iconify icon="solar:settings-bold" width={24} />,
+      },
+      {
+        title: 'จัดการผู้ใช้งาน',
+        path: '/admin/users',
+        icon: <Iconify icon={'solar:users-group-rounded-bold' as IconifyName} width={24} />,
       },
     ],
   },

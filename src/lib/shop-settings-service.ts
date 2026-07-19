@@ -11,6 +11,13 @@ export type ShopSettings = {
   openTime: string;
   closeTime: string;
   customOrder: CustomOrderConfig;
+  announcement: AnnouncementConfig;
+  isOpen: boolean;
+};
+
+export type AnnouncementConfig = {
+  enabled: boolean;
+  message: string;
 };
 
 export type CustomOrderOption = {
@@ -38,7 +45,7 @@ export type CustomOrderSelection = {
 export type ShopSettingsInput = ShopSettings;
 
 const SELECT_COLUMNS =
-  'name, address, phone, promptpay_id, open_time, close_time, custom_order_enabled, custom_order_title, custom_order_steps';
+  'name, address, phone, promptpay_id, open_time, close_time, custom_order_enabled, custom_order_title, custom_order_steps, announcement_enabled, announcement_message, is_open';
 
 type ShopSettingsRow = {
   name: string;
@@ -50,6 +57,9 @@ type ShopSettingsRow = {
   custom_order_enabled: boolean;
   custom_order_title: string;
   custom_order_steps: unknown;
+  announcement_enabled: boolean;
+  announcement_message: string;
+  is_open: boolean;
 };
 
 const DEFAULT_CUSTOM_ORDER_STEPS: CustomOrderStep[] = [
@@ -65,6 +75,15 @@ const DEFAULT_CUSTOM_ORDER_STEPS: CustomOrderStep[] = [
     title: 'เลือกเครื่อง',
     options: ['ลูกชิ้น', 'หมูสด', 'หมูเปื่อย', 'ตับ'].map((label, index) => ({
       id: `topping-${index + 1}`,
+      label,
+      price: 0,
+    })),
+  },
+  {
+    id: 'spicy',
+    title: 'เลือกความเผ็ด',
+    options: ['ไม่เผ็ด', 'เผ็ดน้อย', 'เผ็ดปานกลาง', 'เผ็ดมาก'].map((label, index) => ({
+      id: `spicy-${index + 1}`,
       label,
       price: 0,
     })),
@@ -136,6 +155,11 @@ function mapRow(row: ShopSettingsRow): ShopSettings {
       title: row.custom_order_title,
       steps: normalizeCustomOrderSteps(row.custom_order_steps),
     },
+    announcement: {
+      enabled: row.announcement_enabled,
+      message: row.announcement_message,
+    },
+    isOpen: row.is_open,
   };
 }
 
@@ -151,6 +175,11 @@ const DEFAULT_SETTINGS: ShopSettings = {
     title: 'ความอร่อยเลือกเองได้',
     steps: DEFAULT_CUSTOM_ORDER_STEPS,
   },
+  announcement: {
+    enabled: false,
+    message: '',
+  },
+  isOpen: true,
 };
 
 /** Store info shown on the customer-facing site — safe to call from any page. */
@@ -180,6 +209,8 @@ export async function updateShopSettingsRecord(input: ShopSettingsInput): Promis
       custom_order_enabled: input.customOrder.enabled,
       custom_order_title: input.customOrder.title.trim() || 'ความอร่อยเลือกเองได้',
       custom_order_steps: normalizeCustomOrderSteps(input.customOrder.steps),
+      announcement_enabled: input.announcement.enabled,
+      announcement_message: input.announcement.message.trim().slice(0, 500),
     })
     .eq('id', true)
     .select(SELECT_COLUMNS)
@@ -188,4 +219,13 @@ export async function updateShopSettingsRecord(input: ShopSettingsInput): Promis
   if (error) throw error;
 
   return mapRow(data);
+}
+
+/** Quick เปิดร้าน/ปิดร้าน toggle — updates only is_open, independent of the full settings form. */
+export async function setShopOpenRecord(isOpen: boolean): Promise<void> {
+  const supabase = getSupabaseAdmin();
+
+  const { error } = await supabase.from('shop_settings').update({ is_open: isOpen }).eq('id', true);
+
+  if (error) throw error;
 }

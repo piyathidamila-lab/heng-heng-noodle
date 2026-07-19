@@ -4,8 +4,12 @@ import type { ShopSettings, ShopSettingsInput } from 'src/lib/shop-settings-serv
 
 import { revalidatePath } from 'next/cache';
 
-import { requireAdmin } from 'src/lib/admin-session';
-import { getShopSettings, updateShopSettingsRecord } from 'src/lib/shop-settings-service';
+import { requireAdmin } from 'src/lib/auth-session';
+import {
+  getShopSettings,
+  setShopOpenRecord,
+  updateShopSettingsRecord,
+} from 'src/lib/shop-settings-service';
 
 // ----------------------------------------------------------------------
 
@@ -19,4 +23,10 @@ export async function updateShopSettings(input: ShopSettingsInput): Promise<Shop
   const settings = await updateShopSettingsRecord(input);
   revalidatePath('/');
   return settings;
+}
+
+export async function setShopOpenAdmin(isOpen: boolean): Promise<void> {
+  await requireAdmin();
+  await setShopOpenRecord(isOpen);
+  revalidatePath('/');
 }

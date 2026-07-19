@@ -76,10 +76,8 @@ export function NavMobile({
           sx={{ px: 2, flex: '1 1 auto' }}
           {...other}
         />
-        <NavUpgrade />
+        {slots?.bottomArea ?? <NavUpgrade />}
       </Scrollbar>
-
-      {slots?.bottomArea}
     </Drawer>
   );
 }

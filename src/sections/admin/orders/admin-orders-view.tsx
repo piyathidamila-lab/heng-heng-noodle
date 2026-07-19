@@ -13,6 +13,8 @@ import Typography from '@mui/material/Typography';
 
 import { fTime } from 'src/utils/format-time';
 
+import { useConfirmDialog } from 'src/components/custom-dialog';
+
 import { OpenTablesPanel } from './open-tables-panel';
 import { listOrdersAdmin, updateOrderStatus } from './order-admin-actions';
 import { NEXT_STATUS, STATUS_COLOR, STATUS_LABEL } from './order-status-config';
@@ -34,6 +36,7 @@ type Props = {
 export function AdminOrdersView({ initialOrders, initialSessions }: Props) {
   const [orders, setOrders] = useState(initialOrders);
   const [filter, setFilter] = useState<'active' | 'all'>('active');
+  const { confirm, dialog } = useConfirmDialog();
 
   useEffect(() => {
     let active = true;
@@ -77,7 +80,11 @@ export function AdminOrdersView({ initialOrders, initialSessions }: Props) {
   };
 
   const handleCancel = async (order: OrderRecord) => {
-    if (!window.confirm(`ยกเลิกออเดอร์ ${order.orderNumber} ใช่หรือไม่?`)) return;
+    const confirmed = await confirm({
+      content: `ยกเลิกออเดอร์ ${order.orderNumber} ใช่หรือไม่?`,
+      confirmLabel: 'ยกเลิกออเดอร์',
+    });
+    if (!confirmed) return;
 
     setOrders((prev) => prev.map((o) => (o.id === order.id ? { ...o, status: 'cancelled' } : o)));
     await updateOrderStatus(order.id, 'cancelled');
@@ -199,6 +206,8 @@ export function AdminOrdersView({ initialOrders, initialSessions }: Props) {
           })}
         </Box>
       )}
+
+      {dialog}
     </Box>
   );
 }

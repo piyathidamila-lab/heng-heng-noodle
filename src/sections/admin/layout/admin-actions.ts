@@ -2,11 +2,11 @@
 
 import { redirect } from 'next/navigation';
 
-import { clearAdminSession } from 'src/lib/admin-session';
+import { clearSession } from 'src/lib/auth-session';
 
 // ----------------------------------------------------------------------
 
 export async function adminLogoutAction(): Promise<void> {
-  await clearAdminSession();
-  redirect('/admin/login');
+  await clearSession();
+  redirect('/login');
 }

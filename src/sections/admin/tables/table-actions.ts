@@ -4,7 +4,7 @@ import type { RestaurantTable } from 'src/lib/table-service';
 
 import { revalidatePath } from 'next/cache';
 
-import { requireAdmin } from 'src/lib/admin-session';
+import { requireAdmin } from 'src/lib/auth-session';
 import {
   getTables,
   moveTableRecord,

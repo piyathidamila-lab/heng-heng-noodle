@@ -48,6 +48,10 @@ export type DashboardLayoutProps = LayoutBaseProps & {
     header?: HeaderSectionProps;
     nav?: {
       data?: NavSectionProps['data'];
+      slots?: {
+        topArea?: React.ReactNode;
+        bottomArea?: React.ReactNode;
+      };
     };
     main?: MainSectionProps;
   };
@@ -121,6 +125,7 @@ export function DashboardLayout({
             onClose={onClose}
             cssVars={navVars.section}
             checkPermissions={canDisplayItemByRole}
+            slots={slotProps?.nav?.slots}
           />
 
           {/** @slot Logo */}
@@ -187,6 +192,7 @@ export function DashboardLayout({
       layoutQuery={layoutQuery}
       cssVars={navVars.section}
       checkPermissions={canDisplayItemByRole}
+      slots={slotProps?.nav?.slots}
       onToggleNav={() =>
         settings.setField(
           'navLayout',

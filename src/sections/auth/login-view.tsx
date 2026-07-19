@@ -11,7 +11,7 @@ import Typography from '@mui/material/Typography';
 
 import { Iconify } from 'src/components/iconify';
 
-import { adminLoginAction } from './login-actions';
+import { loginAction } from './login-actions';
 
 // ----------------------------------------------------------------------
 
@@ -19,8 +19,8 @@ type Props = {
   shopName: string;
 };
 
-export function AdminLoginView({ shopName }: Props) {
-  const [state, formAction, pending] = useActionState(adminLoginAction, {});
+export function LoginView({ shopName }: Props) {
+  const [state, formAction, pending] = useActionState(loginAction, {});
 
   return (
     <Box
@@ -33,35 +33,36 @@ export function AdminLoginView({ shopName }: Props) {
         px: 2,
       }}
     >
-      <Card sx={{ width: 1, maxWidth: 380, p: 4 }}>
+      <Card sx={{ width: 1, maxWidth: 420, p: { xs: 4, sm: 5 } }}>
         <Stack spacing={0.5} sx={{ mb: 4, alignItems: 'center', textAlign: 'center' }}>
           <Box
             sx={{
-              width: 56,
-              height: 56,
+              width: 64,
+              height: 64,
               display: 'grid',
               placeItems: 'center',
               borderRadius: '50%',
               bgcolor: 'primary.main',
               color: 'common.white',
               mb: 1.5,
-              fontSize: 28,
+              fontSize: 32,
             }}
           >
             🍜
           </Box>
           <Typography variant="h5">{shopName}</Typography>
           <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-            เข้าสู่ระบบสำหรับแอดมิน
+            เข้าสู่ระบบสำหรับแอดมิน / พนักงานหน้าร้าน
           </Typography>
         </Stack>
 
         <Stack component="form" action={formAction} spacing={2.5}>
+          <TextField name="username" label="ชื่อผู้ใช้" autoFocus fullWidth />
+
           <TextField
             name="password"
             type="password"
-            label="รหัสผ่านแอดมิน"
-            autoFocus
+            label="รหัสผ่าน"
             fullWidth
             error={!!state.error}
             helperText={state.error}
@@ -73,6 +74,7 @@ export function AdminLoginView({ shopName }: Props) {
             size="large"
             loading={pending}
             startIcon={<Iconify icon="solar:user-rounded-bold" />}
+            sx={{ py: 1.5 }}
           >
             เข้าสู่ระบบ
           </Button>

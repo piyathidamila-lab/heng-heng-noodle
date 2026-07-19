@@ -18,6 +18,7 @@ export type OrderRecord = {
   id: string;
   orderNumber: string;
   customerName: string;
+  customerPhone: string;
   orderType: 'dine-in' | 'takeaway';
   tableNumber: string;
   note: string;
@@ -93,6 +94,11 @@ async function getOrCreateOpenSession(tableNumber: string): Promise<string> {
  * tampered "price" in the request body can't change what gets charged.
  */
 export async function createOrderRecord(input: CreateOrderInput): Promise<OrderRecord> {
+  const settings = await getShopSettings();
+  if (!settings.isOpen) {
+    throw new OrderValidationError('ร้านปิดอยู่ในขณะนี้ ไม่สามารถสั่งอาหารได้');
+  }
+
   if (input.lines.length === 0) {
     throw new OrderValidationError('ตะกร้าว่างเปล่า');
   }
@@ -119,7 +125,6 @@ export async function createOrderRecord(input: CreateOrderInput): Promise<OrderR
   if (menuError) throw menuError;
 
   const menuById = new Map((menuItems ?? []).map((item) => [item.id, item]));
-  const settings = input.lines.some((line) => line.customization) ? await getShopSettings() : null;
 
   const orderItems = input.lines.map((line) => {
     if (line.quantity <= 0 || !Number.isInteger(line.quantity)) {
@@ -127,8 +132,8 @@ export async function createOrderRecord(input: CreateOrderInput): Promise<OrderR
     }
 
     if (line.customization) {
-      const config = settings?.customOrder;
-      if (!config?.enabled || config.steps.length === 0) {
+      const config = settings.customOrder;
+      if (!config.enabled || config.steps.length === 0) {
         throw new OrderValidationError('เมนูความอร่อยเลือกเองปิดให้บริการแล้ว กรุณาลองใหม่');
       }
 
@@ -192,7 +197,9 @@ export async function createOrderRecord(input: CreateOrderInput): Promise<OrderR
       note: input.note.trim(),
       total,
     })
-    .select('id, seq, customer_name, order_type, table_number, note, status, total, created_at')
+    .select(
+      'id, seq, customer_name, customer_phone, order_type, table_number, note, status, total, created_at'
+    )
     .single();
 
   if (orderError) throw orderError;
@@ -207,6 +214,7 @@ export async function createOrderRecord(input: CreateOrderInput): Promise<OrderR
     id: order.id,
     orderNumber: formatOrderNumber(order.seq),
     customerName: order.customer_name,
+    customerPhone: order.customer_phone ?? '',
     orderType: order.order_type,
     tableNumber: order.table_number,
     note: order.note,
@@ -223,12 +231,13 @@ export async function createOrderRecord(input: CreateOrderInput): Promise<OrderR
 }
 
 const ORDER_SELECT_COLUMNS =
-  'id, seq, customer_name, order_type, table_number, note, status, total, created_at, order_items (id, name, price, quantity)';
+  'id, seq, customer_name, customer_phone, order_type, table_number, note, status, total, created_at, order_items (id, name, price, quantity)';
 
 type OrderRow = {
   id: string;
   seq: number;
   customer_name: string;
+  customer_phone: string | null;
   order_type: 'dine-in' | 'takeaway';
   table_number: string;
   note: string;
@@ -243,6 +252,7 @@ function mapOrderRow(order: OrderRow): OrderRecord {
     id: order.id,
     orderNumber: formatOrderNumber(order.seq),
     customerName: order.customer_name,
+    customerPhone: order.customer_phone ?? '',
     orderType: order.order_type,
     tableNumber: order.table_number,
     note: order.note,
@@ -267,6 +277,41 @@ export async function getOrders(): Promise<OrderRecord[]> {
     .select(ORDER_SELECT_COLUMNS)
     .order('created_at', { ascending: false })
     .limit(100);
+
+  if (error) throw error;
+
+  return (data ?? []).map(mapOrderRow);
+}
+
+export type OrderHistoryFilter = {
+  /** Inclusive, `YYYY-MM-DD` in the shop's local calendar day. */
+  from?: string;
+  /** Inclusive, `YYYY-MM-DD` in the shop's local calendar day. */
+  to?: string;
+};
+
+/**
+ * Full order history for the admin dashboard (all order types, every
+ * status), optionally narrowed to a day/month range — unlike getOrders()
+ * this isn't capped to the live board's most recent 100.
+ */
+export async function getOrderHistory(filter: OrderHistoryFilter = {}): Promise<OrderRecord[]> {
+  const supabase = getSupabaseAdmin();
+
+  let query = supabase
+    .from('orders')
+    .select(ORDER_SELECT_COLUMNS)
+    .order('created_at', { ascending: false })
+    .limit(500);
+
+  if (filter.from) {
+    query = query.gte('created_at', `${filter.from}T00:00:00`);
+  }
+  if (filter.to) {
+    query = query.lte('created_at', `${filter.to}T23:59:59.999`);
+  }
+
+  const { data, error } = await query;
 
   if (error) throw error;
 
@@ -406,4 +451,64 @@ export async function closeTableSessionRecord(id: string): Promise<void> {
     .eq('status', 'open');
 
   if (error) throw error;
+}
+
+export type BillSummary = {
+  id: string;
+  tableNumber: string;
+  status: 'open' | 'closed';
+  openedAt: string;
+  closedAt: string | null;
+  orderCount: number;
+  total: number;
+};
+
+export type BillHistoryFilter = {
+  /** Inclusive, `YYYY-MM-DD` in the shop's local calendar day — filters on when the table opened. */
+  from?: string;
+  /** Inclusive, `YYYY-MM-DD` in the shop's local calendar day. */
+  to?: string;
+};
+
+/** Every bill (table session), open or closed, newest first — for the เช็คบิล page. */
+export async function getBillHistory(filter: BillHistoryFilter = {}): Promise<BillSummary[]> {
+  const supabase = getSupabaseAdmin();
+
+  let query = supabase
+    .from('table_sessions')
+    .select('id, table_number, status, opened_at, closed_at, orders (total, status)')
+    .order('opened_at', { ascending: false })
+    .limit(300);
+
+  if (filter.from) {
+    query = query.gte('opened_at', `${filter.from}T00:00:00`);
+  }
+  if (filter.to) {
+    query = query.lte('opened_at', `${filter.to}T23:59:59.999`);
+  }
+
+  const { data, error } = await query;
+
+  if (error) throw error;
+
+  return (data ?? [])
+    .map((session) => {
+      const orders = (session.orders ?? []) as { total: number; status: OrderStatus }[];
+      const activeOrders = orders.filter((order) => order.status !== 'cancelled');
+
+      return {
+        id: session.id,
+        tableNumber: session.table_number,
+        status: session.status as 'open' | 'closed',
+        openedAt: session.opened_at,
+        closedAt: session.closed_at,
+        orderCount: activeOrders.length,
+        total: activeOrders.reduce((sum, order) => sum + Number(order.total), 0),
+        allServed:
+          activeOrders.length > 0 &&
+          activeOrders.every((order) => order.status === 'served' || order.status === 'completed'),
+      };
+    })
+    .filter((bill) => bill.status === 'closed' || bill.allServed)
+    .map(({ allServed, ...bill }) => bill);
 }
