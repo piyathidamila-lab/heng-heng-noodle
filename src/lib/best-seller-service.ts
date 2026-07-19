@@ -100,39 +100,30 @@ export async function removeBestSellerRecord(id: string): Promise<void> {
   if (error) throw error;
 }
 
-/** Swaps best_seller_sort_order with the neighboring item to move it up or down the list. */
-export async function moveBestSellerRecord(id: string, direction: 'up' | 'down'): Promise<void> {
-  const items = await getBestSellerItemsAdmin();
-  const index = items.findIndex((item) => item.id === id);
-  if (index === -1) return;
+/** Persists the complete curated order after an admin drag-and-drop operation. */
+export async function reorderBestSellerRecords(orderedIds: string[]): Promise<void> {
+  const currentItems = await getBestSellerItemsAdmin();
+  const currentIds = new Set(currentItems.map((item) => item.id));
 
-  const swapIndex = direction === 'up' ? index - 1 : index + 1;
-  if (swapIndex < 0 || swapIndex >= items.length) return;
+  if (
+    orderedIds.length !== currentIds.size ||
+    new Set(orderedIds).size !== orderedIds.length ||
+    orderedIds.some((id) => !currentIds.has(id))
+  ) {
+    throw new Error('รายการเมนูขายดีมีการเปลี่ยนแปลง กรุณารีเฟรชแล้วลองใหม่');
+  }
 
   const supabase = getSupabaseAdmin();
+  const results = await Promise.all(
+    orderedIds.map((id, index) =>
+      supabase
+        .from('menu_items')
+        .update({ best_seller_sort_order: index + 1 })
+        .eq('id', id)
+        .eq('is_best_seller', true)
+    )
+  );
+  const failed = results.find((result) => result.error);
 
-  const { data: rows, error: fetchError } = await supabase
-    .from('menu_items')
-    .select('id, best_seller_sort_order')
-    .in('id', [items[index].id, items[swapIndex].id]);
-
-  if (fetchError) throw fetchError;
-
-  const current = rows?.find((row) => row.id === items[index].id);
-  const neighbor = rows?.find((row) => row.id === items[swapIndex].id);
-  if (!current || !neighbor) return;
-
-  const [{ error: errorA }, { error: errorB }] = await Promise.all([
-    supabase
-      .from('menu_items')
-      .update({ best_seller_sort_order: neighbor.best_seller_sort_order })
-      .eq('id', current.id),
-    supabase
-      .from('menu_items')
-      .update({ best_seller_sort_order: current.best_seller_sort_order })
-      .eq('id', neighbor.id),
-  ]);
-
-  if (errorA) throw errorA;
-  if (errorB) throw errorB;
+  if (failed?.error) throw failed.error;
 }

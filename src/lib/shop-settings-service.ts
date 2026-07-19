@@ -12,10 +12,11 @@ import { getSupabasePublic } from './supabase-public';
 
 // ----------------------------------------------------------------------
 
-export type { BusinessHours, DayHours, WeekdayKey } from 'src/utils/business-hours';
+export type { DayHours, WeekdayKey, BusinessHours } from 'src/utils/business-hours';
 
 export type ShopSettings = {
   name: string;
+  logoUrl: string | null;
   address: string;
   phone: string;
   promptPayId: string;
@@ -70,15 +71,22 @@ export type CustomOrderSelection = {
 export type ShopSettingsInput = ShopSettings;
 
 const SELECT_COLUMNS =
+  'name, logo_url, address, phone, promptpay_id, business_hours, special_closures, custom_order_enabled, custom_order_title, custom_order_steps, announcement_enabled, announcement_message, loyalty_enabled, loyalty_baht_per_star, is_open';
+
+const WITHOUT_LOGO_SELECT_COLUMNS =
   'name, address, phone, promptpay_id, business_hours, special_closures, custom_order_enabled, custom_order_title, custom_order_steps, announcement_enabled, announcement_message, loyalty_enabled, loyalty_baht_per_star, is_open';
+
+const LEGACY_SELECT_COLUMNS =
+  'name, address, phone, promptpay_id, business_hours, custom_order_enabled, custom_order_title, custom_order_steps, announcement_enabled, announcement_message, loyalty_enabled, loyalty_baht_per_star, is_open';
 
 type ShopSettingsRow = {
   name: string;
+  logo_url?: string | null;
   address: string;
   phone: string;
   promptpay_id: string;
   business_hours: unknown;
-  special_closures: unknown;
+  special_closures?: unknown;
   custom_order_enabled: boolean;
   custom_order_title: string;
   custom_order_steps: unknown;
@@ -223,6 +231,7 @@ function mapRow(row: ShopSettingsRow): ShopSettings {
 
   return {
     name: row.name,
+    logoUrl: row.logo_url ?? null,
     address: row.address,
     phone: row.phone,
     promptPayId: row.promptpay_id,
@@ -249,6 +258,7 @@ function mapRow(row: ShopSettingsRow): ShopSettings {
 
 const DEFAULT_SETTINGS: ShopSettings = {
   name: 'เฮงเฮง ก๋วยเตี๋ยว',
+  logoUrl: null,
   address: 'บ้านขามเรียง มหาสารคาม',
   phone: '',
   promptPayId: '',
@@ -275,13 +285,30 @@ const DEFAULT_SETTINGS: ShopSettings = {
 /** Store info shown on the customer-facing site — safe to call from any page. */
 export async function getShopSettings(): Promise<ShopSettings> {
   const supabase = getSupabasePublic();
+  const variants = [
+    { columns: SELECT_COLUMNS, defaults: {} },
+    { columns: WITHOUT_LOGO_SELECT_COLUMNS, defaults: { logo_url: null } },
+    {
+      columns: LEGACY_SELECT_COLUMNS,
+      defaults: { logo_url: null, special_closures: [] },
+    },
+  ];
 
-  const { data, error } = await supabase.from('shop_settings').select(SELECT_COLUMNS).maybeSingle();
+  for (const variant of variants) {
+    const result = await supabase.from('shop_settings').select(variant.columns).maybeSingle();
 
-  if (error) throw error;
-  if (!data) return DEFAULT_SETTINGS;
+    if (!result.error) {
+      if (!result.data) return DEFAULT_SETTINGS;
+      const row = result.data as unknown as ShopSettingsRow;
+      return mapRow({ ...row, ...variant.defaults });
+    }
 
-  return mapRow(data);
+    const isMissingColumn =
+      result.error.code === '42703' || ['PGRST200', 'PGRST204'].includes(result.error.code ?? '');
+    if (!isMissingColumn) throw result.error;
+  }
+
+  return DEFAULT_SETTINGS;
 }
 
 export async function updateShopSettingsRecord(input: ShopSettingsInput): Promise<ShopSettings> {
@@ -291,6 +318,7 @@ export async function updateShopSettingsRecord(input: ShopSettingsInput): Promis
     .from('shop_settings')
     .update({
       name: input.name.trim(),
+      logo_url: input.logoUrl,
       address: input.address.trim(),
       phone: input.phone.trim(),
       promptpay_id: input.promptPayId.trim(),

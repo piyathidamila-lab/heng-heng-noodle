@@ -77,6 +77,16 @@ export type MenuItemInput = {
 export async function createMenuItemRecord(input: MenuItemInput): Promise<MenuItem> {
   const supabase = getSupabaseAdmin();
 
+  const { data: lastItem, error: orderError } = await supabase
+    .from('menu_items')
+    .select('sort_order')
+    .eq('category', input.category)
+    .order('sort_order', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (orderError) throw orderError;
+
   const { data, error } = await supabase
     .from('menu_items')
     .insert({
@@ -87,6 +97,7 @@ export async function createMenuItemRecord(input: MenuItemInput): Promise<MenuIt
       emoji: input.emoji,
       image_url: input.imageUrl,
       is_available: input.isAvailable,
+      sort_order: (lastItem?.sort_order ?? 0) + 1,
     })
     .select(SELECT_COLUMNS)
     .single();
@@ -96,11 +107,30 @@ export async function createMenuItemRecord(input: MenuItemInput): Promise<MenuIt
   return mapRow(data);
 }
 
-export async function updateMenuItemRecord(
-  id: string,
-  input: MenuItemInput
-): Promise<MenuItem> {
+export async function updateMenuItemRecord(id: string, input: MenuItemInput): Promise<MenuItem> {
   const supabase = getSupabaseAdmin();
+
+  const { data: currentItem, error: currentError } = await supabase
+    .from('menu_items')
+    .select('category')
+    .eq('id', id)
+    .single();
+
+  if (currentError) throw currentError;
+
+  let nextSortOrder: number | undefined;
+  if (currentItem.category !== input.category) {
+    const { data: lastItem, error: orderError } = await supabase
+      .from('menu_items')
+      .select('sort_order')
+      .eq('category', input.category)
+      .order('sort_order', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (orderError) throw orderError;
+    nextSortOrder = (lastItem?.sort_order ?? 0) + 1;
+  }
 
   const { data, error } = await supabase
     .from('menu_items')
@@ -112,6 +142,7 @@ export async function updateMenuItemRecord(
       emoji: input.emoji,
       image_url: input.imageUrl,
       is_available: input.isAvailable,
+      ...(nextSortOrder !== undefined && { sort_order: nextSortOrder }),
     })
     .eq('id', id)
     .select(SELECT_COLUMNS)
@@ -128,4 +159,40 @@ export async function deleteMenuItemRecord(id: string): Promise<void> {
   const { error } = await supabase.from('menu_items').delete().eq('id', id);
 
   if (error) throw error;
+}
+
+/** Persists the display order for every menu item in one category. */
+export async function reorderMenuItemRecords(
+  category: string,
+  orderedIds: string[]
+): Promise<void> {
+  const supabase = getSupabaseAdmin();
+  const { data: currentItems, error: fetchError } = await supabase
+    .from('menu_items')
+    .select('id')
+    .eq('category', category);
+
+  if (fetchError) throw fetchError;
+
+  const currentIds = new Set((currentItems ?? []).map((item) => item.id));
+  if (
+    orderedIds.length !== currentIds.size ||
+    new Set(orderedIds).size !== orderedIds.length ||
+    orderedIds.some((id) => !currentIds.has(id))
+  ) {
+    throw new Error('รายการเมนูมีการเปลี่ยนแปลง กรุณารีเฟรชแล้วลองใหม่');
+  }
+
+  const results = await Promise.all(
+    orderedIds.map((id, index) =>
+      supabase
+        .from('menu_items')
+        .update({ sort_order: index + 1 })
+        .eq('id', id)
+        .eq('category', category)
+    )
+  );
+  const failed = results.find((result) => result.error);
+
+  if (failed?.error) throw failed.error;
 }

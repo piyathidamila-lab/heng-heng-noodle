@@ -12,6 +12,7 @@ import {
   createMenuItemRecord,
   deleteMenuItemRecord,
   updateMenuItemRecord,
+  reorderMenuItemRecords,
 } from 'src/lib/menu-service';
 
 // ----------------------------------------------------------------------
@@ -57,5 +58,11 @@ export async function deleteMenuItem(id: string, imageUrl: string | null): Promi
     await deleteMenuImage(imageUrl).catch(() => {});
   }
 
+  revalidatePath('/');
+}
+
+export async function reorderMenuItems(category: string, orderedIds: string[]): Promise<void> {
+  await requireAdmin();
+  await reorderMenuItemRecords(category, orderedIds);
   revalidatePath('/');
 }

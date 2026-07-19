@@ -10,16 +10,13 @@ import { useMemo, useState, useEffect, useCallback } from 'react';
 import Box from '@mui/material/Box';
 import Chip from '@mui/material/Chip';
 import Stack from '@mui/material/Stack';
-import Divider from '@mui/material/Divider';
 import Typography from '@mui/material/Typography';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
-
-import { fDateTime } from 'src/utils/format-time';
 
 import { Iconify } from 'src/components/iconify';
 
 import { listOrderHistoryAdmin } from 'src/sections/admin/orders/order-admin-actions';
-import { STATUS_COLOR, STATUS_LABEL } from 'src/sections/admin/orders/order-status-config';
+import { OrderHistoryTable } from 'src/sections/admin/order-history/order-history-table';
 
 import { StaffPageHero } from '../components/staff-page-hero';
 
@@ -86,6 +83,7 @@ export function StaffOrderHistoryView({ initialOrders }: Props) {
     setPreset(value);
     setFrom(range.from);
     setTo(range.to);
+    if (value === 'all') void fetchOrders(null, null);
   };
 
   const summary = useMemo(() => {
@@ -156,7 +154,14 @@ export function StaffOrderHistoryView({ initialOrders }: Props) {
 
       <Stack
         spacing={2}
-        sx={{ p: 2, mb: 3, borderRadius: 3, border: '1px solid', borderColor: 'grey.200', bgcolor: 'common.white' }}
+        sx={{
+          p: 2,
+          mb: 3,
+          borderRadius: 3,
+          border: '1px solid',
+          borderColor: 'grey.200',
+          bgcolor: 'common.white',
+        }}
       >
         <Stack direction="row" spacing={1} alignItems="center">
           <Iconify icon="solar:calendar-date-bold" width={22} sx={{ color: 'primary.main' }} />
@@ -196,72 +201,7 @@ export function StaffOrderHistoryView({ initialOrders }: Props) {
         </Stack>
       </Stack>
 
-      {orders.length === 0 ? (
-        <Stack alignItems="center" spacing={1.25} sx={{ p: 6, borderRadius: 3, bgcolor: 'common.white' }}>
-          <Box sx={{ fontSize: 42 }}>📭</Box>
-          <Typography variant="h6">ไม่พบออเดอร์</Typography>
-          <Typography variant="body2" sx={{ color: 'text.secondary', textAlign: 'center' }}>
-            ลองเลือกช่วงเวลาอื่นเพื่อค้นหารายการ
-          </Typography>
-        </Stack>
-      ) : (
-        <Box
-          sx={{
-            display: 'grid',
-            gap: 1.5,
-            gridTemplateColumns: { xs: '1fr', lg: 'repeat(2, minmax(0, 1fr))' },
-          }}
-        >
-          {orders.map((order) => (
-            <Stack
-              key={order.id}
-              spacing={1.25}
-              sx={{
-                p: 2,
-                borderRadius: 3,
-                border: '1px solid',
-                borderColor: 'grey.200',
-                bgcolor: 'common.white',
-                boxShadow: '0 6px 20px rgba(33,43,54,0.05)',
-              }}
-            >
-              <Stack direction="row" alignItems="flex-start" justifyContent="space-between">
-                <Box>
-                  <Stack direction="row" spacing={1} alignItems="center">
-                    <Typography variant="h6">{order.orderNumber}</Typography>
-                    <Chip size="small" label={STATUS_LABEL[order.status]} color={STATUS_COLOR[order.status]} />
-                  </Stack>
-                  <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-                    {fDateTime(order.createdAt)}
-                  </Typography>
-                </Box>
-                <Chip
-                  size="small"
-                  variant="outlined"
-                  label={order.orderType === 'dine-in' ? `โต๊ะ ${order.tableNumber}` : 'กลับบ้าน'}
-                />
-              </Stack>
-
-              <Typography variant="subtitle1">{order.customerName}</Typography>
-              <Divider />
-              <Typography
-                variant="body2"
-                sx={{ color: 'text.secondary', display: '-webkit-box', WebkitBoxOrient: 'vertical', WebkitLineClamp: 2, overflow: 'hidden' }}
-              >
-                {order.items.map((item) => `${item.quantity}× ${item.name}`).join(' · ')}
-              </Typography>
-              <Stack direction="row" alignItems="center" justifyContent="space-between">
-                <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-                  {order.items.reduce((sum, item) => sum + item.quantity, 0)} ชิ้น
-                </Typography>
-                <Typography variant="h6" sx={{ color: 'primary.main' }}>
-                  ฿{order.total.toLocaleString('th-TH')}
-                </Typography>
-              </Stack>
-            </Stack>
-          ))}
-        </Box>
-      )}
+      <OrderHistoryTable orders={orders} loading={loading} />
     </Box>
   );
 }

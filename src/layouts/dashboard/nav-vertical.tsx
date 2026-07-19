@@ -2,6 +2,7 @@ import type { Breakpoint } from '@mui/material/styles';
 import type { NavSectionProps } from 'src/components/nav-section';
 
 import { varAlpha, mergeClasses } from 'minimal-shared/utils';
+import { Stack, Typography } from 'node_modules/@mui/material/esm';
 
 import Box from '@mui/material/Box';
 import { styled } from '@mui/material/styles';
@@ -42,9 +43,13 @@ export function NavVertical({
   const renderNavVertical = () => (
     <>
       {slots?.topArea ?? (
-        <Box sx={{ pl: 3.5, pt: 2.5, pb: 1 }}>
+        <Stack direction="row" alignItems="center" sx={{ pl: 3.5, pt: 2.5, pb: 3 }}>
           <Logo />
-        </Box>
+          <Stack ml={1}>
+            <Typography variant="subtitle1">เฮงเฮง อั๋ง รวย รวย</Typography>
+            <Typography variant="subtitle1">มหาสารคาม</Typography>
+          </Stack>
+        </Stack>
       )}
 
       <Scrollbar fillContent>

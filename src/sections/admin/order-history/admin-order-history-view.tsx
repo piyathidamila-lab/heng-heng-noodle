@@ -9,14 +9,13 @@ import { useMemo, useState, useEffect, useCallback } from 'react';
 import Box from '@mui/material/Box';
 import Chip from '@mui/material/Chip';
 import Stack from '@mui/material/Stack';
-import Divider from '@mui/material/Divider';
 import Typography from '@mui/material/Typography';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 
-import { fDateTime } from 'src/utils/format-time';
+import { CustomBreadcrumbs } from 'src/components/custom-breadcrumbs';
 
+import { OrderHistoryTable } from './order-history-table';
 import { listOrderHistoryAdmin } from '../orders/order-admin-actions';
-import { STATUS_COLOR, STATUS_LABEL } from '../orders/order-status-config';
 
 // ----------------------------------------------------------------------
 
@@ -94,6 +93,7 @@ export function AdminOrderHistoryView({ initialOrders }: Props) {
     const range = presetRange(value);
     setFrom(range.from);
     setTo(range.to);
+    if (value === 'all') void fetchOrders(null, null);
   };
 
   const handleFromChange = (value: Dayjs | null) => {
@@ -116,11 +116,14 @@ export function AdminOrderHistoryView({ initialOrders }: Props) {
 
   return (
     <Box>
-      <Typography variant="h4" sx={{ mb: 3 }}>
-        ประวัติออเดอร์
-      </Typography>
-
-      <Stack spacing={3} sx={{ mb: 2 }}>
+      <CustomBreadcrumbs heading=" ประวัติออเดอร์" />
+      <Stack
+        direction="row"
+        justifyContent="space-between"
+        alignItems="center"
+        spacing={3}
+        sx={{ mt: 2 }}
+      >
         <Stack direction="row" flexWrap="wrap" gap={1}>
           {PRESETS.map((item) => (
             <Chip
@@ -151,82 +154,13 @@ export function AdminOrderHistoryView({ initialOrders }: Props) {
         </Stack>
       </Stack>
 
-      <Typography variant="body2" sx={{ color: 'text.secondary', mb: 3 }}>
+      <Typography variant="body2" sx={{ color: 'text.secondary', my: 3 }}>
         {loading
           ? 'กำลังโหลด...'
           : `${summary.count} ออเดอร์ · ยอดรวม ${summary.total.toLocaleString('th-TH')} บาท`}
       </Typography>
 
-      {orders.length === 0 ? (
-        <Typography sx={{ color: 'text.secondary', textAlign: 'center', py: 8 }}>
-          ไม่พบออเดอร์ในช่วงเวลาที่เลือก
-        </Typography>
-      ) : (
-        <Stack spacing={1.5}>
-          {orders.map((order) => (
-            <Stack
-              key={order.id}
-              spacing={1}
-              sx={{
-                p: 2,
-                borderRadius: 2,
-                bgcolor: 'common.white',
-                border: '1px solid',
-                borderColor: 'grey.200',
-              }}
-            >
-              <Stack
-                direction={{ xs: 'column', sm: 'row' }}
-                alignItems={{ sm: 'center' }}
-                justifyContent="space-between"
-                spacing={0.75}
-              >
-                <Stack direction="row" alignItems="center" spacing={1}>
-                  <Typography variant="subtitle1">{order.orderNumber}</Typography>
-                  <Chip
-                    size="small"
-                    label={STATUS_LABEL[order.status]}
-                    color={STATUS_COLOR[order.status]}
-                  />
-                  <Chip
-                    size="small"
-                    variant="outlined"
-                    label={order.orderType === 'dine-in' ? `โต๊ะ ${order.tableNumber}` : 'กลับบ้าน'}
-                  />
-                </Stack>
-                <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-                  {fDateTime(order.createdAt)}
-                </Typography>
-              </Stack>
-
-              <Stack direction="row" flexWrap="wrap" columnGap={2} rowGap={0.25}>
-                <Typography variant="body2">{order.customerName}</Typography>
-                {order.customerPhone && (
-                  <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-                    {order.customerPhone}
-                  </Typography>
-                )}
-              </Stack>
-
-              <Divider />
-
-              <Stack
-                direction="row"
-                justifyContent="space-between"
-                alignItems="flex-start"
-                spacing={2}
-              >
-                <Typography variant="body2" sx={{ color: 'text.secondary', flex: 1 }}>
-                  {order.items.map((item) => `${item.name} ×${item.quantity}`).join(' · ')}
-                </Typography>
-                <Typography variant="subtitle2" sx={{ whiteSpace: 'nowrap' }}>
-                  {order.total.toLocaleString('th-TH')} บาท
-                </Typography>
-              </Stack>
-            </Stack>
-          ))}
-        </Stack>
-      )}
+      <OrderHistoryTable orders={orders} loading={loading} />
     </Box>
   );
 }

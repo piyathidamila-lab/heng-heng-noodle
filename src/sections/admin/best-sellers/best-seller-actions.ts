@@ -7,9 +7,9 @@ import { revalidatePath } from 'next/cache';
 import { requireAdmin } from 'src/lib/auth-session';
 import {
   addBestSellerRecord,
-  moveBestSellerRecord,
   removeBestSellerRecord,
   getBestSellerItemsAdmin,
+  reorderBestSellerRecords,
 } from 'src/lib/best-seller-service';
 
 // ----------------------------------------------------------------------
@@ -32,8 +32,8 @@ export async function removeBestSeller(id: string): Promise<void> {
   revalidatePath('/');
 }
 
-export async function moveBestSeller(id: string, direction: 'up' | 'down'): Promise<void> {
+export async function reorderBestSellers(orderedIds: string[]): Promise<void> {
   await requireAdmin();
-  await moveBestSellerRecord(id, direction);
+  await reorderBestSellerRecords(orderedIds);
   revalidatePath('/');
 }

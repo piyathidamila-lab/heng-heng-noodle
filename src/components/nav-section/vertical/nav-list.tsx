@@ -3,12 +3,13 @@
 import type { NavListProps, NavSubListProps } from '../types';
 
 import { useBoolean } from 'minimal-shared/hooks';
+import { isExternalLink } from 'minimal-shared/utils';
 import { useRef, useEffect, useCallback } from 'react';
-import { isActiveLink, isExternalLink } from 'minimal-shared/utils';
 
 import { usePathname } from 'src/routes/hooks';
 
 import { NavItem } from './nav-item';
+import { isNavItemActive } from '../utils';
 import { navSectionClasses } from '../styles';
 import { NavUl, NavLi, NavCollapse } from '../components';
 
@@ -25,16 +26,15 @@ export function NavList({
   const pathname = usePathname();
   const navItemRef = useRef<HTMLButtonElement>(null);
 
-  const isActive = isActiveLink(pathname, data.path, data.deepMatch ?? !!data.children);
+  const isActive = isNavItemActive(pathname, data);
 
-  const { value: open, onFalse: onClose, onToggle } = useBoolean(isActive);
+  const { value: open, onTrue: onOpen, onFalse: onClose, onToggle } = useBoolean(isActive);
 
   useEffect(() => {
-    if (!isActive) {
-      onClose();
-    }
+    if (isActive) onOpen();
+    else onClose();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pathname]);
+  }, [isActive, pathname]);
 
   const handleToggleMenu = useCallback(() => {
     if (data.children) {

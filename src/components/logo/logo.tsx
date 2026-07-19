@@ -2,6 +2,7 @@
 
 import type { LinkProps } from '@mui/material/Link';
 
+import useSWR from 'swr';
 import { mergeClasses } from 'minimal-shared/utils';
 
 import Link from '@mui/material/Link';
@@ -20,6 +21,19 @@ export type LogoProps = LinkProps & {
   disabled?: boolean;
 };
 
+export type ShopLogoResponse = {
+  name: string;
+  logoUrl: string | null;
+};
+
+export const SHOP_LOGO_API = '/api/shop-settings/logo/';
+
+async function logoFetcher(url: string): Promise<ShopLogoResponse> {
+  const response = await fetch(url, { cache: 'no-store' });
+  if (!response.ok) throw new Error('โหลดโลโก้ร้านไม่สำเร็จ');
+  return response.json() as Promise<ShopLogoResponse>;
+}
+
 export function Logo({
   sx,
   disabled,
@@ -28,6 +42,12 @@ export function Logo({
   isSingle = true,
   ...other
 }: LogoProps) {
+  const { data } = useSWR<ShopLogoResponse>(SHOP_LOGO_API, logoFetcher, {
+    revalidateOnFocus: true,
+    dedupingInterval: 30_000,
+  });
+  const logoUrl = data?.logoUrl;
+  const logoAlt = data?.name ? `โลโก้ ${data.name}` : 'โลโก้ร้าน';
   // const theme = useTheme();
 
   // const uniqueId = useId();
@@ -39,19 +59,21 @@ export function Logo({
 
   const singleLogo = (
     <img
-      alt="Single logo"
-      src={`${CONFIG.assetsDir}/logo/logo-single.svg`}
+      alt={logoAlt}
+      src={logoUrl || `${CONFIG.assetsDir}/logo/logo-single.svg`}
       width="100%"
       height="100%"
+      style={{ objectFit: 'contain' }}
     />
   );
 
   const fullLogo = (
     <img
-      alt="Full logo"
-      src={`${CONFIG.assetsDir}/logo/logo-full.svg`}
+      alt={logoAlt}
+      src={logoUrl || `${CONFIG.assetsDir}/logo/logo-full.svg`}
       width="100%"
       height="100%"
+      style={{ objectFit: 'contain' }}
     />
   );
 

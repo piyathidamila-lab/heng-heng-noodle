@@ -4,24 +4,22 @@ import type { MenuItemInput } from 'src/lib/menu-service';
 import type { MenuCategory } from 'src/lib/category-service';
 import type { MenuItem as MenuItemType } from 'src/sections/order/menu-data';
 
-import { useRef, useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 
-import Box from '@mui/material/Box';
+import Grid from '@mui/material/Grid';
 import Stack from '@mui/material/Stack';
 import Dialog from '@mui/material/Dialog';
 import Button from '@mui/material/Button';
 import Switch from '@mui/material/Switch';
 import MenuItem from '@mui/material/MenuItem';
 import TextField from '@mui/material/TextField';
-import IconButton from '@mui/material/IconButton';
 import DialogTitle from '@mui/material/DialogTitle';
 import DialogContent from '@mui/material/DialogContent';
 import DialogActions from '@mui/material/DialogActions';
-import CircularProgress from '@mui/material/CircularProgress';
 import FormControlLabel from '@mui/material/FormControlLabel';
 
+import { Upload } from 'src/components/upload';
 import { toast } from 'src/components/snackbar';
-import { Iconify } from 'src/components/iconify';
 
 import { uploadMenuItemImage } from './menu-actions';
 
@@ -56,7 +54,6 @@ export function MenuItemFormDialog({
 
   const [form, setForm] = useState<MenuItemInput>(emptyForm);
   const [uploading, setUploading] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (open) {
@@ -79,11 +76,8 @@ export function MenuItemFormDialog({
 
   const canSubmit = form.name.trim().length > 0 && form.price >= 0 && !uploading;
 
-  const handlePickFile = () => fileInputRef.current?.click();
-
-  const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    event.target.value = '';
+  const handleDrop = async (acceptedFiles: File[]) => {
+    const file = acceptedFiles[0];
     if (!file) return;
 
     setUploading(true);
@@ -98,138 +92,96 @@ export function MenuItemFormDialog({
   };
 
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="xs" fullWidth>
+    <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
       <DialogTitle>{editing ? 'แก้ไขเมนู' : 'เพิ่มเมนูใหม่'}</DialogTitle>
 
       <DialogContent>
-        <Stack spacing={2.5} sx={{ pt: 1 }}>
-          <Stack direction="column" spacing={2} alignItems="center">
-            <Box
-              onClick={handlePickFile}
-              sx={{
-                width: 1,
-                height: 220,
-                flexShrink: 0,
-                borderRadius: 2,
-                display: 'grid',
-                placeItems: 'center',
-                fontSize: 44,
-                bgcolor: 'grey.100',
-                backgroundImage: form.imageUrl ? `url(${form.imageUrl})` : undefined,
-                backgroundSize: 'cover',
-                backgroundPosition: 'center',
-                cursor: 'pointer',
-                position: 'relative',
-                border: '1px solid',
-                borderColor: 'grey.200',
+        <Grid container spacing={2.5} sx={{ pt: 1 }}>
+          <Grid size={{ xs: 12, md: 5 }}>
+            <Upload
+              value={form.imageUrl}
+              loading={uploading}
+              disabled={uploading}
+              multiple={false}
+              maxFiles={1}
+              maxSize={5 * 1024 * 1024}
+              accept={{
+                'image/jpeg': ['.jpg', '.jpeg'],
+                'image/png': ['.png'],
+                'image/webp': ['.webp'],
+                'image/gif': ['.gif'],
               }}
-            >
-              {uploading ? <CircularProgress size={28} /> : !form.imageUrl && form.emoji}
+              onDrop={(acceptedFiles) => void handleDrop(acceptedFiles)}
+              onDelete={() => setForm((prev) => ({ ...prev, imageUrl: null }))}
+              helperText="รองรับ JPEG, PNG, WEBP และ GIF ขนาดไม่เกิน 5MB"
+              sx={{ height: { xs: 260, md: 360 }, borderRadius: 2.5 }}
+            />
+          </Grid>
 
-              {!uploading && form.imageUrl && (
-                <IconButton
-                  size="small"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setForm((prev) => ({ ...prev, imageUrl: null }));
-                  }}
-                  sx={{
-                    position: 'absolute',
-                    top: -8,
-                    right: -8,
-                    bgcolor: 'common.white',
-                    boxShadow: 1,
-                    '&:hover': { bgcolor: 'grey.100' },
-                  }}
-                >
-                  <Iconify icon="mingcute:close-line" width={16} />
-                </IconButton>
-              )}
-            </Box>
-
-            <Stack spacing={0.5}>
-              <Button
-                size="small"
-                variant="outlined"
-                onClick={handlePickFile}
-                disabled={uploading}
-                startIcon={<Iconify icon="solar:gallery-add-bold" width={18} />}
+          <Grid size={{ xs: 12, md: 7 }}>
+            <Stack spacing={2}>
+              <TextField
+                select
+                label="หมวดหมู่"
+                value={form.category}
+                onChange={(e) => setForm((prev) => ({ ...prev, category: e.target.value }))}
+                fullWidth
               >
-                {form.imageUrl ? 'เปลี่ยนรูปภาพ' : 'อัปโหลดรูปภาพ'}
-              </Button>
-              <Box sx={{ fontSize: 12, color: 'text.secondary' }}>
-                JPEG, PNG, WEBP, GIF ไม่เกิน 5MB
-              </Box>
-            </Stack>
+                {categories.map((category) => (
+                  <MenuItem key={category.value} value={category.value}>
+                    {category.label}
+                  </MenuItem>
+                ))}
+              </TextField>
 
-            <Box
-              component="input"
-              ref={fileInputRef}
-              type="file"
-              accept="image/jpeg,image/png,image/webp,image/gif"
-              onChange={handleFileChange}
-              sx={{ display: 'none' }}
-            />
-          </Stack>
-
-          <TextField
-            select
-            label="หมวดหมู่"
-            value={form.category}
-            onChange={(e) => setForm((prev) => ({ ...prev, category: e.target.value }))}
-            fullWidth
-          >
-            {categories.map((category) => (
-              <MenuItem key={category.value} value={category.value}>
-                {category.label}
-              </MenuItem>
-            ))}
-          </TextField>
-
-          <TextField
-            label="ชื่อเมนู"
-            value={form.name}
-            onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))}
-            fullWidth
-            autoFocus
-          />
-
-          <TextField
-            label="คำอธิบาย"
-            value={form.description}
-            onChange={(e) => setForm((prev) => ({ ...prev, description: e.target.value }))}
-            fullWidth
-            multiline
-            minRows={2}
-          />
-
-          <Stack direction="row" spacing={2}>
-            <TextField
-              label="ราคา (บาท)"
-              type="number"
-              value={form.price}
-              onChange={(e) => setForm((prev) => ({ ...prev, price: Number(e.target.value) }))}
-              fullWidth
-              slotProps={{ htmlInput: { min: 0, step: 1 } }}
-            />
-            <TextField
-              label="อีโมจิ (สำรองเมื่อไม่มีรูป)"
-              value={form.emoji}
-              onChange={(e) => setForm((prev) => ({ ...prev, emoji: e.target.value }))}
-              fullWidth
-            />
-          </Stack>
-
-          <FormControlLabel
-            control={
-              <Switch
-                checked={form.isAvailable}
-                onChange={(e) => setForm((prev) => ({ ...prev, isAvailable: e.target.checked }))}
+              <TextField
+                label="ชื่อเมนู"
+                value={form.name}
+                onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))}
+                fullWidth
+                autoFocus
               />
-            }
-            label="พร้อมจำหน่าย"
-          />
-        </Stack>
+
+              <TextField
+                label="คำอธิบาย"
+                value={form.description}
+                onChange={(e) => setForm((prev) => ({ ...prev, description: e.target.value }))}
+                fullWidth
+                multiline
+                minRows={2}
+              />
+
+              <Stack direction="row" spacing={2}>
+                <TextField
+                  label="ราคา (บาท)"
+                  type="number"
+                  value={form.price}
+                  onChange={(e) => setForm((prev) => ({ ...prev, price: Number(e.target.value) }))}
+                  fullWidth
+                  slotProps={{ htmlInput: { min: 0, step: 1 } }}
+                />
+                <TextField
+                  label="อีโมจิ (สำรองเมื่อไม่มีรูป)"
+                  value={form.emoji}
+                  onChange={(e) => setForm((prev) => ({ ...prev, emoji: e.target.value }))}
+                  fullWidth
+                />
+              </Stack>
+
+              <FormControlLabel
+                control={
+                  <Switch
+                    checked={form.isAvailable}
+                    onChange={(e) =>
+                      setForm((prev) => ({ ...prev, isAvailable: e.target.checked }))
+                    }
+                  />
+                }
+                label="พร้อมจำหน่าย"
+              />
+            </Stack>
+          </Grid>
+        </Grid>
       </DialogContent>
 
       <DialogActions sx={{ px: 3, pb: 3 }}>
