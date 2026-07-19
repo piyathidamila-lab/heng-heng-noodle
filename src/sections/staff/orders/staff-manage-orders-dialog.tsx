@@ -1,6 +1,7 @@
 'use client';
 
 import type { IconifyName } from 'src/components/iconify';
+import type { RestaurantTableAvailability } from 'src/lib/table-service';
 import type { TableBill } from 'src/sections/admin/orders/table-session-actions';
 import type { OrderStatus, OrderRecord, TableSessionSummary } from 'src/lib/order-service';
 
@@ -12,8 +13,10 @@ import Stack from '@mui/material/Stack';
 import Dialog from '@mui/material/Dialog';
 import Button from '@mui/material/Button';
 import Divider from '@mui/material/Divider';
+import ButtonBase from '@mui/material/ButtonBase';
 import IconButton from '@mui/material/IconButton';
 import Typography from '@mui/material/Typography';
+import DialogTitle from '@mui/material/DialogTitle';
 import DialogContent from '@mui/material/DialogContent';
 import CircularProgress from '@mui/material/CircularProgress';
 
@@ -23,12 +26,13 @@ import { toast } from 'src/components/snackbar';
 import { Iconify } from 'src/components/iconify';
 import { useConfirmDialog } from 'src/components/custom-dialog';
 
-import { getTableBill } from 'src/sections/admin/orders/table-session-actions';
 import { updateOrderStatus } from 'src/sections/admin/orders/order-admin-actions';
+import { listTableAvailability } from 'src/sections/order/table-availability-actions';
 import {
   NEXT_STATUS,
   STATUS_LABEL,
 } from 'src/sections/admin/orders/order-status-config';
+import { getTableBill, moveTableSession } from 'src/sections/admin/orders/table-session-actions';
 
 // ----------------------------------------------------------------------
 
@@ -49,17 +53,21 @@ const STATUS_STYLE: Record<
 type Props = {
   session: TableSessionSummary | null;
   onClose: () => void;
+  onMoved?: (newTableNumber: string) => void;
 };
 
 function formatBaht(value: number): string {
   return `฿${value.toLocaleString('th-TH')}`;
 }
 
-export function StaffManageOrdersDialog({ session, onClose }: Props) {
+export function StaffManageOrdersDialog({ session, onClose, onMoved }: Props) {
   const [bill, setBill] = useState<TableBill | null>(null);
   const [loading, setLoading] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [filter, setFilter] = useState<FilterValue>('all');
+  const [movePickerOpen, setMovePickerOpen] = useState(false);
+  const [moveTargets, setMoveTargets] = useState<RestaurantTableAvailability[] | null>(null);
+  const [movingTo, setMovingTo] = useState<string | null>(null);
   const { confirm, dialog: confirmDialog } = useConfirmDialog();
 
   const fetchBill = useCallback(async () => {
@@ -143,6 +151,48 @@ export function StaffManageOrdersDialog({ session, onClose }: Props) {
     if (confirmed) await runOrderAction(order, 'cancelled');
   };
 
+  const handleOpenMovePicker = async () => {
+    setMovePickerOpen(true);
+    setMoveTargets(null);
+    try {
+      const tables = await listTableAvailability();
+      setMoveTargets(tables);
+    } catch (error) {
+      console.error(error);
+      toast.error('โหลดรายการโต๊ะไม่สำเร็จ กรุณาลองใหม่');
+      setMovePickerOpen(false);
+    }
+  };
+
+  const handleSelectMoveTarget = async (table: RestaurantTableAvailability) => {
+    if (!session) return;
+
+    const confirmed = await confirm({
+      title: 'ยืนยันย้ายโต๊ะ',
+      content: `ย้ายออเดอร์ทั้งหมดจากโต๊ะ ${session.tableNumber} ไปยังโต๊ะ ${table.label} ใช่หรือไม่?`,
+      confirmLabel: 'ย้ายโต๊ะ',
+    });
+    if (!confirmed) return;
+
+    setMovingTo(table.id);
+    try {
+      const result = await moveTableSession(session.id, table.label);
+      if (!result.ok) {
+        toast.error(result.message);
+        return;
+      }
+      toast.success(`ย้ายโต๊ะไปยังโต๊ะ ${table.label} แล้ว`);
+      setMovePickerOpen(false);
+      onMoved?.(table.label);
+      await fetchBill();
+    } catch (error) {
+      console.error(error);
+      toast.error('ย้ายโต๊ะไม่สำเร็จ กรุณาลองใหม่');
+    } finally {
+      setMovingTo(null);
+    }
+  };
+
   return (
     <>
       <Dialog
@@ -208,17 +258,30 @@ export function StaffManageOrdersDialog({ session, onClose }: Props) {
                 </Typography>
               </Box>
             </Stack>
-            <IconButton
-              onClick={onClose}
-              aria-label="ปิดหน้าต่าง"
-              sx={{
-                color: 'common.white',
-                bgcolor: 'rgba(255,255,255,0.12)',
-                '&:hover': { bgcolor: 'rgba(255,255,255,0.20)' },
-              }}
-            >
-              <Iconify icon="mingcute:close-line" />
-            </IconButton>
+            <Stack direction="row" spacing={1} alignItems="center">
+              <Button
+                onClick={handleOpenMovePicker}
+                startIcon={<Iconify icon="solar:transfer-horizontal-bold-duotone" width={20} />}
+                sx={{
+                  color: 'common.white',
+                  bgcolor: 'rgba(255,255,255,0.12)',
+                  '&:hover': { bgcolor: 'rgba(255,255,255,0.20)' },
+                }}
+              >
+                ย้ายโต๊ะ
+              </Button>
+              <IconButton
+                onClick={onClose}
+                aria-label="ปิดหน้าต่าง"
+                sx={{
+                  color: 'common.white',
+                  bgcolor: 'rgba(255,255,255,0.12)',
+                  '&:hover': { bgcolor: 'rgba(255,255,255,0.20)' },
+                }}
+              >
+                <Iconify icon="mingcute:close-line" />
+              </IconButton>
+            </Stack>
           </Stack>
         </Box>
 
@@ -459,6 +522,64 @@ export function StaffManageOrdersDialog({ session, onClose }: Props) {
             ปิดหน้าต่าง
           </Button>
         </Stack>
+      </Dialog>
+
+      <Dialog
+        open={movePickerOpen}
+        onClose={() => setMovePickerOpen(false)}
+        fullWidth
+        maxWidth="xs"
+        slotProps={{ paper: { sx: { borderRadius: 4 } } }}
+      >
+        <DialogTitle>ย้ายโต๊ะ {session?.tableNumber} ไปที่...</DialogTitle>
+        <DialogContent sx={{ pb: 3 }}>
+          {!moveTargets ? (
+            <Stack alignItems="center" spacing={1.5} sx={{ py: 5 }}>
+              <CircularProgress size={28} />
+            </Stack>
+          ) : (
+            <Box
+              sx={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
+                gap: 1.25,
+              }}
+            >
+              {moveTargets.map((table) => {
+                const isCurrent = table.label === session?.tableNumber;
+                const isOccupied = table.status === 'occupied';
+                const disabled = isCurrent || isOccupied || movingTo !== null;
+
+                return (
+                  <ButtonBase
+                    key={table.id}
+                    disabled={disabled}
+                    onClick={() => handleSelectMoveTarget(table)}
+                    sx={{
+                      p: 1.5,
+                      borderRadius: 2.5,
+                      border: '1px solid',
+                      borderColor: isCurrent ? 'primary.main' : 'grey.200',
+                      bgcolor: isCurrent ? 'primary.lighter' : 'common.white',
+                      opacity: isOccupied && !isCurrent ? 0.5 : 1,
+                    }}
+                  >
+                    <Stack alignItems="center" spacing={0.5} sx={{ width: 1 }}>
+                      {movingTo === table.id ? (
+                        <CircularProgress size={18} />
+                      ) : (
+                        <Typography variant="subtitle1">โต๊ะ {table.label}</Typography>
+                      )}
+                      <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+                        {isCurrent ? 'โต๊ะปัจจุบัน' : isOccupied ? 'ไม่ว่าง' : 'ว่าง'}
+                      </Typography>
+                    </Stack>
+                  </ButtonBase>
+                );
+              })}
+            </Box>
+          )}
+        </DialogContent>
       </Dialog>
 
       {confirmDialog}

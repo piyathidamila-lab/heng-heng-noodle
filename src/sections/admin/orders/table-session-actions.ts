@@ -13,6 +13,8 @@ import {
   getBillHistory,
   getOrdersBySession,
   getOpenTableSessions,
+  OrderValidationError,
+  moveTableSessionRecord,
   closeTableSessionRecord,
 } from 'src/lib/order-service';
 
@@ -31,6 +33,26 @@ export async function listBillHistoryAdmin(filter: BillHistoryFilter = {}): Prom
 export async function closeTableSession(id: string): Promise<void> {
   await requireOrderAccess();
   await closeTableSessionRecord(id);
+}
+
+export type MoveTableSessionResult = { ok: true } | { ok: false; message: string };
+
+export async function moveTableSession(
+  sessionId: string,
+  newTableNumber: string
+): Promise<MoveTableSessionResult> {
+  await requireOrderAccess();
+
+  try {
+    await moveTableSessionRecord(sessionId, newTableNumber);
+    return { ok: true };
+  } catch (error) {
+    if (error instanceof OrderValidationError) {
+      return { ok: false, message: error.message };
+    }
+    console.error(error);
+    return { ok: false, message: 'ย้ายโต๊ะไม่สำเร็จ กรุณาลองใหม่อีกครั้ง' };
+  }
 }
 
 export type TableBill = {

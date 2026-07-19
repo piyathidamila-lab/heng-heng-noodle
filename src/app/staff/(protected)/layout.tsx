@@ -15,7 +15,7 @@ type Props = {
 export default async function Layout({ children }: Props) {
   const user = await getCurrentUser();
 
-  if (!user) {
+  if (!user || user.role !== 'staff') {
     redirect('/login');
   }
 

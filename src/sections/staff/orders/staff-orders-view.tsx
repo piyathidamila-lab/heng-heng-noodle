@@ -3,7 +3,7 @@
 import type { IconifyName } from 'src/components/iconify';
 import type { OrderStatus, OrderRecord, TableSessionSummary } from 'src/lib/order-service';
 
-import { useMemo, useState, useEffect } from 'react';
+import { useMemo, useState, useEffect, useCallback } from 'react';
 
 import Box from '@mui/material/Box';
 import Chip from '@mui/material/Chip';
@@ -79,20 +79,22 @@ export function StaffOrdersView({ initialOrders, initialSessions }: Props) {
   const orderIds = useMemo(() => orders.map((order) => order.id), [orders]);
   useNewOrderAlert(orderIds);
 
+  const refreshBoard = useCallback(async () => {
+    const [nextOrders, nextSessions] = await Promise.all([
+      listOrdersAdmin(),
+      listOpenTableSessions(),
+    ]);
+    setOrders(nextOrders);
+    setSessions(nextSessions);
+    setNow(Date.now());
+  }, []);
+
   useEffect(() => {
     let active = true;
 
     const tick = async () => {
       try {
-        const [nextOrders, nextSessions] = await Promise.all([
-          listOrdersAdmin(),
-          listOpenTableSessions(),
-        ]);
-        if (active) {
-          setOrders(nextOrders);
-          setSessions(nextSessions);
-          setNow(Date.now());
-        }
+        if (active) await refreshBoard();
       } catch (error) {
         console.error(error);
       }
@@ -104,7 +106,7 @@ export function StaffOrdersView({ initialOrders, initialSessions }: Props) {
       active = false;
       clearInterval(interval);
     };
-  }, []);
+  }, [refreshBoard]);
 
   const takeawayOrders = useMemo(
     () => orders.filter((order) => order.orderType === 'takeaway'),
@@ -640,6 +642,12 @@ export function StaffOrdersView({ initialOrders, initialSessions }: Props) {
       <StaffManageOrdersDialog
         session={activeSession}
         onClose={() => setActiveSession(null)}
+        onMoved={(newTableNumber) => {
+          setActiveSession((current) =>
+            current ? { ...current, tableNumber: newTableNumber } : current
+          );
+          refreshBoard().catch((error) => console.error(error));
+        }}
       />
       {dialog}
     </Box>

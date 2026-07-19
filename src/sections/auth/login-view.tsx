@@ -9,6 +9,7 @@ import Button from '@mui/material/Button';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 
+import { Logo } from 'src/components/logo';
 import { Iconify } from 'src/components/iconify';
 
 import { loginAction } from './login-actions';
@@ -35,25 +36,14 @@ export function LoginView({ shopName }: Props) {
     >
       <Card sx={{ width: 1, maxWidth: 420, p: { xs: 4, sm: 5 } }}>
         <Stack spacing={0.5} sx={{ mb: 4, alignItems: 'center', textAlign: 'center' }}>
-          <Box
-            sx={{
-              width: 64,
-              height: 64,
-              display: 'grid',
-              placeItems: 'center',
-              borderRadius: '50%',
-              bgcolor: 'primary.main',
-              color: 'common.white',
-              mb: 1.5,
-              fontSize: 32,
-            }}
-          >
-            🍜
-          </Box>
-          <Typography variant="h5">{shopName}</Typography>
-          <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-            เข้าสู่ระบบสำหรับแอดมิน / พนักงานหน้าร้าน
-          </Typography>
+          <Logo sx={{ height: 100, width: 100 }} />
+
+          <Stack mt={2}>
+            <Typography variant="h5">{shopName}</Typography>
+            <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+              เข้าสู่ระบบสำหรับแอดมิน / พนักงานหน้าร้าน
+            </Typography>
+          </Stack>
         </Stack>
 
         <Stack component="form" action={formAction} spacing={2.5}>

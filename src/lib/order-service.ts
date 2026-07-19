@@ -569,6 +569,61 @@ export async function closeTableSessionRecord(id: string): Promise<void> {
   await awardStarsForSession(id);
 }
 
+/**
+ * Moves an open table session (and every order in it) to a different table
+ * label — for when diners physically move seats mid-meal. Both `orders`
+ * and `table_sessions` carry a denormalized table_number, so both need
+ * updating to keep bills and the customer-facing table view correct.
+ */
+export async function moveTableSessionRecord(sessionId: string, newTableNumber: string): Promise<void> {
+  const trimmed = newTableNumber.trim();
+  if (!trimmed) {
+    throw new OrderValidationError('กรุณาเลือกโต๊ะปลายทาง');
+  }
+
+  const supabase = getSupabaseAdmin();
+
+  const { data: session, error: sessionError } = await supabase
+    .from('table_sessions')
+    .select('id, table_number, status')
+    .eq('id', sessionId)
+    .maybeSingle();
+
+  if (sessionError) throw sessionError;
+  if (!session || session.status !== 'open') {
+    throw new OrderValidationError('ไม่พบโต๊ะที่ต้องการย้าย หรือโต๊ะถูกปิดไปแล้ว');
+  }
+  if (session.table_number === trimmed) {
+    throw new OrderValidationError('โต๊ะปลายทางต้องไม่ใช่โต๊ะเดิม');
+  }
+
+  const { data: existing, error: existingError } = await supabase
+    .from('table_sessions')
+    .select('id')
+    .eq('table_number', trimmed)
+    .eq('status', 'open')
+    .maybeSingle();
+
+  if (existingError) throw existingError;
+  if (existing) {
+    throw new OrderValidationError(`โต๊ะ ${trimmed} มีลูกค้าใช้งานอยู่ ไม่สามารถย้ายไปได้`);
+  }
+
+  const { error: updateSessionError } = await supabase
+    .from('table_sessions')
+    .update({ table_number: trimmed })
+    .eq('id', sessionId);
+
+  if (updateSessionError) throw updateSessionError;
+
+  const { error: updateOrdersError } = await supabase
+    .from('orders')
+    .update({ table_number: trimmed })
+    .eq('session_id', sessionId);
+
+  if (updateOrdersError) throw updateOrdersError;
+}
+
 export type BillSummary = {
   id: string;
   tableNumber: string;

@@ -1,7 +1,9 @@
 import type { Metadata } from 'next';
 
 import { Suspense } from 'react';
+import { redirect } from 'next/navigation';
 
+import { getCurrentUser } from 'src/lib/auth-session';
 import { getCategories } from 'src/lib/category-service';
 import { getCurrentMember } from 'src/lib/member-session';
 import { getPublicMenuItems } from 'src/lib/menu-service';
@@ -22,6 +24,11 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 
 export default async function Page() {
+  const staffUser = await getCurrentUser();
+  if (staffUser) {
+    redirect(staffUser.role === 'admin' ? '/admin/overview' : '/staff/orders');
+  }
+
   const [items, categories, bestSellers, shop, member] = await Promise.all([
     getPublicMenuItems(),
     getCategories(),
