@@ -3,8 +3,8 @@
 import type { Dayjs } from 'dayjs';
 import type { OrderRecord } from 'src/lib/order-service';
 import type { IconifyName } from 'src/components/iconify';
+import type { DateRangePresetKey } from 'src/utils/business-hours';
 
-import dayjs from 'dayjs';
 import { useMemo, useState, useEffect, useCallback } from 'react';
 
 import Box from '@mui/material/Box';
@@ -12,6 +12,8 @@ import Chip from '@mui/material/Chip';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
+
+import { getDateRangePreset } from 'src/utils/business-hours';
 
 import { Iconify } from 'src/components/iconify';
 
@@ -23,7 +25,7 @@ import { StaffPageHero } from '../components/staff-page-hero';
 // ----------------------------------------------------------------------
 
 const DATE_FORMAT = 'YYYY-MM-DD';
-type PresetKey = 'today' | 'yesterday' | 'last7' | 'thisMonth' | 'all';
+type PresetKey = Exclude<DateRangePresetKey, 'lastMonth'>;
 
 const PRESETS: { value: PresetKey; label: string }[] = [
   { value: 'all', label: 'ทั้งหมด' },
@@ -32,20 +34,6 @@ const PRESETS: { value: PresetKey; label: string }[] = [
   { value: 'last7', label: '7 วันล่าสุด' },
   { value: 'thisMonth', label: 'เดือนนี้' },
 ];
-
-function presetRange(preset: PresetKey): { from: Dayjs | null; to: Dayjs | null } {
-  const now = dayjs();
-  if (preset === 'today') return { from: now.startOf('day'), to: now.endOf('day') };
-  if (preset === 'yesterday') {
-    const yesterday = now.subtract(1, 'day');
-    return { from: yesterday.startOf('day'), to: yesterday.endOf('day') };
-  }
-  if (preset === 'last7') {
-    return { from: now.subtract(6, 'day').startOf('day'), to: now.endOf('day') };
-  }
-  if (preset === 'thisMonth') return { from: now.startOf('month'), to: now.endOf('month') };
-  return { from: null, to: null };
-}
 
 type Props = { initialOrders: OrderRecord[] };
 
@@ -79,7 +67,7 @@ export function StaffOrderHistoryView({ initialOrders }: Props) {
   }, [from, to]);
 
   const handlePreset = (value: PresetKey) => {
-    const range = presetRange(value);
+    const range = getDateRangePreset(value);
     setPreset(value);
     setFrom(range.from);
     setTo(range.to);

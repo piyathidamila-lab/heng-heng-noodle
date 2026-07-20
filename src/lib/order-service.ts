@@ -2,7 +2,7 @@ import type { RealtimeChannel } from '@supabase/supabase-js';
 import type { OrdersRealtimeEventName } from './realtime-events';
 import type { CustomOrderSelection } from './shop-settings-service';
 
-import { getShopDateKey } from 'src/utils/business-hours';
+import { getShopDateKey, getShopDayStartISO } from 'src/utils/business-hours';
 
 import { getSupabaseAdmin } from './supabase-admin';
 import { getShopSettings } from './shop-settings-service';
@@ -339,13 +339,18 @@ function mapOrderRow(order: OrderRow): OrderRecord {
   };
 }
 
-/** All orders for the admin dashboard, newest first. */
+/**
+ * Today's orders (shop-local calendar day) for the live staff/admin board —
+ * resets to nothing at midnight instead of dragging yesterday's finished
+ * orders along. For full history across days, use getOrderHistory() instead.
+ */
 export async function getOrders(): Promise<OrderRecord[]> {
   const supabase = getSupabaseAdmin();
 
   const { data, error } = await supabase
     .from('orders')
     .select(ORDER_SELECT_COLUMNS)
+    .gte('created_at', getShopDayStartISO())
     .order('created_at', { ascending: false })
     .limit(100);
 

@@ -14,9 +14,10 @@ type Props = {
   subtitle: string;
   icon: IconifyName;
   badge?: string;
+  action?: React.ReactNode;
 };
 
-export function StaffPageHero({ title, subtitle, icon, badge }: Props) {
+export function StaffPageHero({ title, subtitle, icon, badge, action }: Props) {
   return (
     <Box
       sx={{
@@ -70,12 +71,21 @@ export function StaffPageHero({ title, subtitle, icon, badge }: Props) {
             </Typography>
           </Box>
         </Stack>
-        {badge && (
-          <Chip
-            label={badge}
-            sx={{ color: 'common.white', fontWeight: 700, bgcolor: 'rgba(255,255,255,0.14)' }}
-          />
-        )}
+        <Stack
+          spacing={2}
+          direction="row"
+          alignItems="center"
+          justifyContent="flex-end"
+          sx={{ mb: 2 }}
+        >
+          {badge && (
+            <Chip
+              label={badge}
+              sx={{ color: 'common.white', fontWeight: 700, bgcolor: 'rgba(255,255,255,0.14)' }}
+            />
+          )}
+          {action && action}
+        </Stack>
       </Stack>
     </Box>
   );

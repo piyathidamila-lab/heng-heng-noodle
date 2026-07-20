@@ -2,14 +2,14 @@ import dayjs from 'dayjs';
 import utc from 'dayjs/plugin/utc';
 import timezone from 'dayjs/plugin/timezone';
 
+import { SHOP_TZ } from 'src/utils/business-hours';
+
 import { getSupabaseAdmin } from './supabase-admin';
 
 // ----------------------------------------------------------------------
 
 dayjs.extend(utc);
 dayjs.extend(timezone);
-
-const SHOP_TZ = 'Asia/Bangkok';
 
 export type SalesPeriod = 'today' | 'week' | 'month';
 
@@ -60,6 +60,8 @@ export type CategoryBestSellers = {
 
 export type DashboardPeriodAnalytics = {
   summary: SalesPeriodSummary;
+  /** Same total, split by order type — both start back at 0 each period since summary itself does. */
+  salesByType: Record<'dine-in' | 'takeaway', SalesPeriodSummary>;
   dishCount: number;
   bestSellers: BestSellerItem[];
   categoryBestSellers: CategoryBestSellers[];
@@ -91,6 +93,7 @@ const DAYS = [
 type DashboardOrderRow = {
   total: number;
   created_at: string;
+  order_type: 'dine-in' | 'takeaway';
   order_items: {
     name: string;
     price: number;
@@ -187,11 +190,21 @@ function buildPeriodAnalytics(
     });
   });
 
+  const salesByType: Record<'dine-in' | 'takeaway', SalesPeriodSummary> = {
+    'dine-in': { total: 0, orderCount: 0 },
+    takeaway: { total: 0, orderCount: 0 },
+  };
+  periodRows.forEach((order) => {
+    salesByType[order.order_type].total += Number(order.total);
+    salesByType[order.order_type].orderCount += 1;
+  });
+
   return {
     summary: {
       total: periodRows.reduce((sum, order) => sum + Number(order.total), 0),
       orderCount: periodRows.length,
     },
+    salesByType,
     dishCount,
     bestSellers: sortedBestSellers(overallTally, 8),
     categoryBestSellers: Array.from(categoryTallies.entries())
@@ -220,7 +233,9 @@ export async function getDashboardAnalytics(): Promise<DashboardAnalytics> {
   const [ordersResult, categoriesResult] = await Promise.all([
     supabase
       .from('orders')
-      .select('total, created_at, order_items (name, price, quantity, menu_items (category))')
+      .select(
+        'total, created_at, order_type, order_items (name, price, quantity, menu_items (category))'
+      )
       .neq('status', 'cancelled')
       .gte('created_at', queryStart.toISOString()),
     supabase.from('menu_categories').select('value, label'),
@@ -250,7 +265,9 @@ export async function getTodaySales(): Promise<DashboardPeriodAnalytics> {
   const [ordersResult, categoriesResult] = await Promise.all([
     supabase
       .from('orders')
-      .select('total, created_at, order_items (name, price, quantity, menu_items (category))')
+      .select(
+        'total, created_at, order_type, order_items (name, price, quantity, menu_items (category))'
+      )
       .neq('status', 'cancelled')
       .gte('created_at', todayStart.toISOString()),
     supabase.from('menu_categories').select('value, label'),

@@ -1,38 +1,37 @@
 'use client';
 
 import type { Dayjs } from 'dayjs';
+import type { DateRangePresetKey } from 'src/utils/business-hours';
 import type { OrderRecord, BillSummary } from 'src/lib/order-service';
 
-import dayjs from 'dayjs';
 import { useMemo, useState, useEffect, useCallback } from 'react';
 
-import Box from '@mui/material/Box';
 import Chip from '@mui/material/Chip';
 import Stack from '@mui/material/Stack';
-import Button from '@mui/material/Button';
+import { Box, Card } from '@mui/material';
+import Collapse from '@mui/material/Collapse';
 import ButtonBase from '@mui/material/ButtonBase';
 import Typography from '@mui/material/Typography';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 
 import { fTime, fDateTime } from 'src/utils/format-time';
+import { getDateRangePreset } from 'src/utils/business-hours';
 
-import { toast } from 'src/components/snackbar';
 import { Iconify } from 'src/components/iconify';
-import { useConfirmDialog } from 'src/components/custom-dialog';
 
 import { BillDialog } from 'src/sections/admin/orders/bill-dialog';
 import {
   listBillHistoryAdmin,
-  markTakeawayOrderPaid,
   listTakeawayBillHistoryAdmin,
 } from 'src/sections/admin/orders/table-session-actions';
 
+import { TakeawayBillDialog } from './takeaway-bill-dialog';
 import { StaffPageHero } from '../components/staff-page-hero';
 
 // ----------------------------------------------------------------------
 
 const DATE_FORMAT = 'YYYY-MM-DD';
-type PresetKey = 'today' | 'yesterday' | 'last7' | 'thisMonth' | 'all';
+type PresetKey = Exclude<DateRangePresetKey, 'lastMonth'>;
 
 const PRESETS: { value: PresetKey; label: string }[] = [
   { value: 'all', label: 'ทั้งหมด' },
@@ -42,18 +41,6 @@ const PRESETS: { value: PresetKey; label: string }[] = [
   { value: 'thisMonth', label: 'เดือนนี้' },
 ];
 
-function presetRange(preset: PresetKey): { from: Dayjs | null; to: Dayjs | null } {
-  const now = dayjs();
-  if (preset === 'today') return { from: now.startOf('day'), to: now.endOf('day') };
-  if (preset === 'yesterday') {
-    const yesterday = now.subtract(1, 'day');
-    return { from: yesterday.startOf('day'), to: yesterday.endOf('day') };
-  }
-  if (preset === 'last7') return { from: now.subtract(6, 'day'), to: now.endOf('day') };
-  if (preset === 'thisMonth') return { from: now.startOf('month'), to: now.endOf('month') };
-  return { from: null, to: null };
-}
-
 type Props = {
   initialBills: BillSummary[];
   initialTakeawayBills: OrderRecord[];
@@ -62,15 +49,22 @@ type Props = {
 export function StaffBillsView({ initialBills, initialTakeawayBills }: Props) {
   const [bills, setBills] = useState(initialBills);
   const [takeawayBills, setTakeawayBills] = useState(initialTakeawayBills);
-  const [billType, setBillType] = useState<'dine-in' | 'takeaway'>('dine-in');
+  // Default to whichever type actually has something waiting to be paid, so a
+  // takeaway order sitting unpaid isn't missed just because dine-in loads first
+  // and looks empty — falls back to dine-in when both/neither have anything open.
+  const [billType, setBillType] = useState<'dine-in' | 'takeaway'>(() => {
+    const hasOpenDineIn = initialBills.some((bill) => bill.status === 'open');
+    const hasOpenTakeaway = initialTakeawayBills.some((order) => order.paymentStatus === 'unpaid');
+    return !hasOpenDineIn && hasOpenTakeaway ? 'takeaway' : 'dine-in';
+  });
   const [preset, setPreset] = useState<PresetKey>('all');
   const [from, setFrom] = useState<Dayjs | null>(null);
   const [to, setTo] = useState<Dayjs | null>(null);
   const [loading, setLoading] = useState(false);
   const [activeBill, setActiveBill] = useState<BillSummary | null>(null);
+  const [activeTakeawayOrder, setActiveTakeawayOrder] = useState<OrderRecord | null>(null);
   const [status, setStatus] = useState<'open' | 'closed'>('open');
-  const [payingId, setPayingId] = useState<string | null>(null);
-  const { confirm, dialog } = useConfirmDialog();
+  const [showCustomRange, setShowCustomRange] = useState(false);
 
   const fetchBills = useCallback(async (nextFrom: Dayjs | null, nextTo: Dayjs | null) => {
     setLoading(true);
@@ -121,7 +115,7 @@ export function StaffBillsView({ initialBills, initialTakeawayBills }: Props) {
   );
 
   const handlePreset = (value: PresetKey) => {
-    const range = presetRange(value);
+    const range = getDateRangePreset(value);
     setPreset(value);
     setFrom(range.from);
     setTo(range.to);
@@ -135,31 +129,12 @@ export function StaffBillsView({ initialBills, initialTakeawayBills }: Props) {
     );
   };
 
-  const handleTakeawayPaid = async (order: OrderRecord) => {
-    const confirmed = await confirm({
-      title: 'ยืนยันรับชำระเงิน',
-      content: `ออเดอร์ ${order.orderNumber} ของ ${order.customerName} ยอด ฿${order.total.toLocaleString('th-TH')} ชำระเงินแล้วใช่หรือไม่?`,
-      confirmLabel: 'ชำระแล้ว',
-      confirmColor: 'success',
-    });
-    if (!confirmed) return;
-
-    setPayingId(order.id);
-    try {
-      await markTakeawayOrderPaid(order.id);
-      const paidAt = new Date().toISOString();
-      setTakeawayBills((current) =>
-        current.map((item) =>
-          item.id === order.id ? { ...item, paymentStatus: 'paid', paidAt } : item
-        )
-      );
-      toast.success(`รับชำระออเดอร์ ${order.orderNumber} แล้ว`);
-    } catch (error) {
-      console.error(error);
-      toast.error('บันทึกการชำระเงินไม่สำเร็จ กรุณาลองใหม่');
-    } finally {
-      setPayingId(null);
-    }
+  const handleTakeawayPaid = (orderId: string, paidAt: string) => {
+    setTakeawayBills((current) =>
+      current.map((item) =>
+        item.id === orderId ? { ...item, paymentStatus: 'paid', paidAt } : item
+      )
+    );
   };
 
   return (
@@ -170,28 +145,78 @@ export function StaffBillsView({ initialBills, initialTakeawayBills }: Props) {
         icon="solar:bill-list-bold-duotone"
         badge={summary.open > 0 ? `รอเช็คบิล ${summary.open} รายการ` : 'ไม่มีรายการค้างชำระ'}
       />
+      <Stack sx={{ display: 'flex', flexDirection: 'row', justifyContent: 'space-between' }}>
+        <Stack direction="row" alignItems="center" flexWrap="wrap" gap={0.75} sx={{ mb: 1 }}>
+          {PRESETS.map((item) => (
+            <Chip
+              key={item.value}
+              size="small"
+              label={item.label}
+              onClick={() => {
+                setShowCustomRange(false);
+                handlePreset(item.value);
+              }}
+              color={preset === item.value ? 'primary' : 'default'}
+              variant={preset === item.value ? 'filled' : 'outlined'}
+            />
+          ))}
+          <Chip
+            size="small"
+            icon={<Iconify icon="solar:calendar-date-bold" width={15} />}
+            label="กำหนดเอง"
+            onClick={() => setShowCustomRange((current) => !current)}
+            color={showCustomRange ? 'primary' : 'default'}
+            variant={showCustomRange ? 'filled' : 'outlined'}
+          />
+          {loading && <Chip size="small" label="กำลังโหลด..." color="info" />}
+        </Stack>
 
-      <Stack direction="row" spacing={1} sx={{ mb: 3 }}>
-        <Chip
-          label={`ออเดอร์ในร้าน ${tableSummary.open}`}
-          onClick={() => setBillType('dine-in')}
-          color={billType === 'dine-in' ? 'primary' : 'default'}
-          variant={billType === 'dine-in' ? 'filled' : 'outlined'}
-        />
-        <Chip
-          label={`ออเดอร์กลับบ้าน ${takeawaySummary.open}`}
-          onClick={() => setBillType('takeaway')}
-          color={billType === 'takeaway' ? 'primary' : 'default'}
-          variant={billType === 'takeaway' ? 'filled' : 'outlined'}
-        />
+        <Stack direction="row" spacing={1} sx={{ mb: 2 }}>
+          <Chip
+            label={`ออเดอร์ในร้าน ${tableSummary.open}`}
+            onClick={() => setBillType('dine-in')}
+            color={billType === 'dine-in' ? 'primary' : 'default'}
+            variant={billType === 'dine-in' ? 'filled' : 'outlined'}
+          />
+          <Chip
+            label={`ออเดอร์กลับบ้าน ${takeawaySummary.open}`}
+            onClick={() => setBillType('takeaway')}
+            color={billType === 'takeaway' ? 'primary' : 'default'}
+            variant={billType === 'takeaway' ? 'filled' : 'outlined'}
+          />
+        </Stack>
       </Stack>
+      <Collapse in={showCustomRange}>
+        <Card sx={{ p: 2 }}>
+          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} sx={{ mb: 1, pt: 0.5 }}>
+            <DatePicker
+              label="จากวันที่"
+              value={from}
+              onChange={(value) => {
+                setPreset('all');
+                setFrom(value?.startOf('day') ?? null);
+              }}
+              slotProps={{ textField: { fullWidth: true, size: 'small' } }}
+            />
+            <DatePicker
+              label="ถึงวันที่"
+              value={to}
+              onChange={(value) => {
+                setPreset('all');
+                setTo(value?.endOf('day') ?? null);
+              }}
+              slotProps={{ textField: { fullWidth: true, size: 'small' } }}
+            />
+          </Stack>
+        </Card>
+      </Collapse>
 
       <Box
         sx={{
           display: 'grid',
-          gridTemplateColumns: { xs: 'repeat(2, 1fr)', md: 'repeat(3, 1fr)' },
-          gap: 1.5,
-          mb: 3,
+          gridTemplateColumns: 'repeat(3, 1fr)',
+          gap: 1,
+          my: 2,
         }}
       >
         {[
@@ -204,96 +229,52 @@ export function StaffBillsView({ initialBills, initialTakeawayBills }: Props) {
           ],
           ['ชำระแล้ว', summary.closed, 'บิล', '✅', '#E5F8ED'],
           ['ยอดชำระแล้ว', `฿${summary.total.toLocaleString('th-TH')}`, '', '💰', '#EAF4FF'],
-        ].map(([label, value, unit, emoji, color], index) => (
+        ].map(([label, value, unit, emoji, color]) => (
           <Stack
             key={label}
             direction="row"
-            spacing={1.5}
+            spacing={1}
             alignItems="center"
-            sx={{
-              p: 2,
-              minHeight: 100,
-              borderRadius: 2.5,
-              bgcolor: 'common.white',
-              gridColumn: { xs: index === 2 ? '1 / -1' : 'auto', md: 'auto' },
-            }}
+            sx={{ p: 1.25, borderRadius: 2, bgcolor: 'common.white' }}
           >
             <Box
               sx={{
-                width: 46,
-                height: 46,
+                width: 34,
+                height: 34,
+                flexShrink: 0,
                 display: 'grid',
                 placeItems: 'center',
-                borderRadius: 2,
+                borderRadius: 1.5,
                 bgcolor: color,
-                fontSize: 23,
+                fontSize: 16,
               }}
             >
               {emoji}
             </Box>
-            <Box>
-              <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+            <Box sx={{ minWidth: 0 }}>
+              <Typography
+                variant="caption"
+                sx={{ color: 'text.secondary', lineHeight: 1.2 }}
+                noWrap
+              >
                 {label}
               </Typography>
               <Stack direction="row" spacing={0.5} alignItems="baseline">
-                <Typography variant="h4">{value}</Typography>
-                {unit && <Typography variant="caption">{unit}</Typography>}
+                <Typography variant="subtitle1" noWrap>
+                  {value}
+                </Typography>
+                {unit && (
+                  <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+                    {unit}
+                  </Typography>
+                )}
               </Stack>
             </Box>
           </Stack>
         ))}
       </Box>
 
-      <Stack
-        spacing={2}
-        sx={{
-          p: 2,
-          mb: 3,
-          borderRadius: 3,
-          border: '1px solid',
-          borderColor: 'grey.200',
-          bgcolor: 'common.white',
-        }}
-      >
-        <Stack direction="row" alignItems="center" spacing={1}>
-          <Iconify icon="solar:calendar-date-bold" width={22} sx={{ color: 'primary.main' }} />
-          <Typography variant="h6">กรองตามวันที่</Typography>
-          {loading && <Chip size="small" label="กำลังโหลด..." color="info" />}
-        </Stack>
-        <Stack direction="row" flexWrap="wrap" gap={1}>
-          {PRESETS.map((item) => (
-            <Chip
-              key={item.value}
-              label={item.label}
-              onClick={() => handlePreset(item.value)}
-              color={preset === item.value ? 'primary' : 'default'}
-              variant={preset === item.value ? 'filled' : 'outlined'}
-            />
-          ))}
-        </Stack>
-        <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5}>
-          <DatePicker
-            label="จากวันที่"
-            value={from}
-            onChange={(value) => {
-              setPreset('all');
-              setFrom(value?.startOf('day') ?? null);
-            }}
-            slotProps={{ textField: { fullWidth: true } }}
-          />
-          <DatePicker
-            label="ถึงวันที่"
-            value={to}
-            onChange={(value) => {
-              setPreset('all');
-              setTo(value?.endOf('day') ?? null);
-            }}
-            slotProps={{ textField: { fullWidth: true } }}
-          />
-        </Stack>
-      </Stack>
-
-      <Stack direction="row" spacing={1} sx={{ mb: 2 }}>
+      <Stack direction="row" spacing={1} sx={{ my: 2 }}>
         <Chip
           label={`รอชำระ ${summary.open}`}
           onClick={() => setStatus('open')}
@@ -438,68 +419,66 @@ export function StaffBillsView({ initialBills, initialTakeawayBills }: Props) {
             const isPaid = order.paymentStatus === 'paid';
 
             return (
-              <Stack
+              <ButtonBase
                 key={order.id}
-                spacing={1.5}
-                sx={{
-                  p: 2,
-                  borderRadius: 3,
-                  border: '1px solid',
-                  borderColor: isPaid ? '#B5E2C8' : '#F1CB79',
-                  bgcolor: 'common.white',
-                  boxShadow: '0 6px 20px rgba(33,43,54,0.05)',
-                }}
+                onClick={() => setActiveTakeawayOrder(order)}
+                aria-label={`${isPaid ? 'ดูบิล' : 'เช็คบิล'} ${order.orderNumber}`}
+                sx={{ display: 'block', textAlign: 'left', borderRadius: 3 }}
               >
-                <Stack direction="row" alignItems="flex-start" justifyContent="space-between">
-                  <Box>
-                    <Typography variant="h5">{order.orderNumber}</Typography>
-                    <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-                      {order.customerName} · {fTime(order.createdAt)} น.
-                    </Typography>
-                  </Box>
-                  <Chip
-                    size="small"
-                    label={isPaid ? 'ชำระแล้ว' : 'รอชำระ'}
-                    color={isPaid ? 'success' : 'warning'}
-                  />
-                </Stack>
-
-                <Stack spacing={0.5}>
-                  {order.items.map((item) => (
-                    <Stack key={item.id} direction="row" justifyContent="space-between">
-                      <Typography variant="body2">
-                        {item.quantity}× {item.name}
-                      </Typography>
+                <Stack
+                  spacing={1.5}
+                  sx={{
+                    height: 1,
+                    p: 2,
+                    borderRadius: 3,
+                    border: '1px solid',
+                    borderColor: isPaid ? '#B5E2C8' : '#F1CB79',
+                    bgcolor: 'common.white',
+                    boxShadow: '0 6px 20px rgba(33,43,54,0.05)',
+                  }}
+                >
+                  <Stack direction="row" alignItems="flex-start" justifyContent="space-between">
+                    <Box>
+                      <Typography variant="h5">{order.orderNumber}</Typography>
                       <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-                        ฿{(item.price * item.quantity).toLocaleString('th-TH')}
+                        {order.customerName} · {fTime(order.createdAt)} น.
                       </Typography>
-                    </Stack>
-                  ))}
-                </Stack>
+                    </Box>
+                    <Chip
+                      size="small"
+                      label={isPaid ? 'ชำระแล้ว' : 'รอชำระ'}
+                      color={isPaid ? 'success' : 'warning'}
+                    />
+                  </Stack>
 
-                <Stack direction="row" alignItems="center" justifyContent="space-between">
-                  <Typography variant="subtitle1">ยอดสุทธิ</Typography>
-                  <Typography variant="h4" sx={{ color: 'primary.main' }}>
-                    ฿{order.total.toLocaleString('th-TH')}
-                  </Typography>
-                </Stack>
-
-                {isPaid ? (
                   <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-                    {order.paidAt ? `ชำระเมื่อ ${fDateTime(order.paidAt)}` : 'ชำระเงินแล้ว'}
+                    {order.items.length} รายการ
+                    {isPaid && order.paidAt ? ` · ชำระเมื่อ ${fDateTime(order.paidAt)}` : ''}
                   </Typography>
-                ) : (
-                  <Button
-                    variant="contained"
-                    color="success"
-                    loading={payingId === order.id}
-                    onClick={() => handleTakeawayPaid(order)}
-                    startIcon={<Iconify icon="solar:check-circle-bold" />}
-                  >
-                    รับชำระแล้ว
-                  </Button>
-                )}
-              </Stack>
+
+                  <Stack direction="row" alignItems="flex-end" justifyContent="space-between">
+                    <Box>
+                      <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+                        ยอดสุทธิ
+                      </Typography>
+                      <Typography variant="h4" sx={{ color: 'primary.main' }}>
+                        ฿{order.total.toLocaleString('th-TH')}
+                      </Typography>
+                    </Box>
+                    <Stack
+                      direction="row"
+                      spacing={0.5}
+                      alignItems="center"
+                      sx={{ color: 'primary.main' }}
+                    >
+                      <Typography variant="subtitle2">
+                        {isPaid ? 'ดูรายละเอียด' : 'เช็คบิล'}
+                      </Typography>
+                      <Iconify icon="solar:double-alt-arrow-right-bold-duotone" width={18} />
+                    </Stack>
+                  </Stack>
+                </Stack>
+              </ButtonBase>
             );
           })}
         </Box>
@@ -510,7 +489,11 @@ export function StaffBillsView({ initialBills, initialTakeawayBills }: Props) {
         onClose={() => setActiveBill(null)}
         onTableClosed={handleTableClosed}
       />
-      {dialog}
+      <TakeawayBillDialog
+        order={activeTakeawayOrder}
+        onClose={() => setActiveTakeawayOrder(null)}
+        onPaid={handleTakeawayPaid}
+      />
     </Box>
   );
 }

@@ -54,19 +54,18 @@ export function StaffSalesView({ initialSales }: Props) {
         subtitle="สรุปยอดขายและเมนูขายดีของวันนี้ ตั้งแต่ 00:00 น."
         icon="solar:chart-square-outline"
         badge={`${sales.summary.orderCount} ออเดอร์`}
+        action={
+          <Button
+            size="small"
+            color="inherit"
+            loading={refreshing}
+            onClick={handleRefresh}
+            startIcon={<Iconify icon="solar:restart-bold" width={18} />}
+          >
+            รีเฟรช
+          </Button>
+        }
       />
-
-      <Stack direction="row" justifyContent="flex-end" sx={{ mb: 2 }}>
-        <Button
-          size="small"
-          color="inherit"
-          loading={refreshing}
-          onClick={handleRefresh}
-          startIcon={<Iconify icon="solar:restart-bold" width={18} />}
-        >
-          รีเฟรช
-        </Button>
-      </Stack>
 
       <Box
         sx={{
@@ -107,6 +106,50 @@ export function StaffSalesView({ initialSales }: Props) {
                 {label}
               </Typography>
               <Typography variant="h5">{value}</Typography>
+            </Box>
+          </Stack>
+        ))}
+      </Box>
+
+      <Box
+        sx={{
+          display: 'grid',
+          gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)' },
+          gap: 1.5,
+          mb: 3,
+        }}
+      >
+        {(
+          [
+            ['ยอดขายในร้าน', sales.salesByType['dine-in'], '🍽️', '#EAF4FF'],
+            ['ยอดขายกลับบ้าน', sales.salesByType.takeaway, '🥡', '#FFF0ED'],
+          ] as const
+        ).map(([label, typeSales, emoji, color]) => (
+          <Stack
+            key={label}
+            direction="row"
+            spacing={1.5}
+            alignItems="center"
+            sx={{ p: 2, minHeight: 100, borderRadius: 2.5, bgcolor: 'common.white' }}
+          >
+            <Box
+              sx={{
+                width: 46,
+                height: 46,
+                display: 'grid',
+                placeItems: 'center',
+                borderRadius: 2,
+                bgcolor: color,
+                fontSize: 23,
+              }}
+            >
+              {emoji}
+            </Box>
+            <Box>
+              <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+                {label} · {typeSales.orderCount.toLocaleString('th-TH')} ออเดอร์
+              </Typography>
+              <Typography variant="h4">{formatBaht(typeSales.total)}</Typography>
             </Box>
           </Stack>
         ))}

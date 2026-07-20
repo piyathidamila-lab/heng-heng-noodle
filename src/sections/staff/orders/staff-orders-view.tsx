@@ -29,6 +29,7 @@ import {
   STATUS_LABEL,
 } from 'src/sections/admin/orders/order-status-config';
 
+import { StaffPageHero } from '../components/staff-page-hero';
 import { StaffManageOrdersDialog } from './staff-manage-orders-dialog';
 
 // ----------------------------------------------------------------------
@@ -69,6 +70,7 @@ export function StaffOrdersView({ mode, initialOrders, initialSessions }: Props)
   const [filter, setFilter] = useState<'active' | 'all'>('active');
   const [activeSession, setActiveSession] = useState<TableSessionSummary | null>(null);
   const [now, setNow] = useState<number | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
   const { confirm, dialog } = useConfirmDialog();
 
   const orderIds = useMemo(
@@ -95,6 +97,15 @@ export function StaffOrdersView({ mode, initialOrders, initialSessions }: Props)
   }, []);
 
   useOrdersRealtime({ onChange: refreshBoard });
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    try {
+      await refreshBoard();
+    } finally {
+      setRefreshing(false);
+    }
+  };
 
   // Ticks the "waited X minutes" labels independent of data refresh — realtime
   // events fire on order changes, not on a clock, so this keeps them live.
@@ -234,69 +245,23 @@ export function StaffOrdersView({ mode, initialOrders, initialSessions }: Props)
 
   return (
     <Box sx={{ pb: 4 }}>
-      <Box
-        sx={{
-          position: 'relative',
-          overflow: 'hidden',
-          p: { xs: 2.5, sm: 3 },
-          mb: 3,
-          borderRadius: 3,
-          color: 'common.white',
-          background: 'linear-gradient(135deg, #67100E 0%, #9E1B16 58%, #D25125 100%)',
-          boxShadow: '0 14px 34px rgba(103,16,14,0.18)',
-        }}
-      >
-        <Box
-          sx={{
-            position: 'absolute',
-            width: 180,
-            height: 180,
-            top: -100,
-            right: -40,
-            borderRadius: '50%',
-            bgcolor: 'rgba(255,255,255,0.08)',
-          }}
-        />
-        <Stack
-          direction={{ xs: 'column', sm: 'row' }}
-          alignItems={{ xs: 'flex-start', sm: 'center' }}
-          justifyContent="space-between"
-          gap={2}
-          sx={{ position: 'relative' }}
-        >
-          <Stack direction="row" spacing={1.5} alignItems="center">
-            <Box
-              sx={{
-                width: 50,
-                height: 50,
-                display: 'grid',
-                placeItems: 'center',
-                borderRadius: 2.25,
-                bgcolor: 'rgba(255,255,255,0.14)',
-              }}
-            >
-              <Iconify icon="solar:bill-list-bold-duotone" width={28} />
-            </Box>
-            <Box>
-              <Typography variant="h4" sx={{ color: 'common.white' }}>
-                {mode === 'dine-in' ? 'ออเดอร์ในร้าน' : 'ออเดอร์กลับบ้าน'}
-              </Typography>
-              <Typography variant="body2" sx={{ mt: 0.25, opacity: 0.78 }}>
-                ดูรายการและอัปเดตสถานะได้จากหน้านี้
-              </Typography>
-            </Box>
-          </Stack>
-          <Chip
-            icon={<Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: '#22C55E' }} />}
-            label="อัปเดตอัตโนมัติทุก 5 วินาที"
-            sx={{
-              color: 'common.white',
-              bgcolor: 'rgba(255,255,255,0.14)',
-              '& .MuiChip-icon': { ml: 1.25 },
-            }}
-          />
-        </Stack>
-      </Box>
+      <StaffPageHero
+        title={mode === 'dine-in' ? 'ออเดอร์ในร้าน' : 'ออเดอร์กลับบ้าน'}
+        subtitle="ดูรายการและอัปเดตสถานะได้จากหน้านี้"
+        icon="solar:bill-list-bold-duotone"
+        badge="อัปเดตแบบเรียลไทม์"
+        action={
+          <Button
+            size="small"
+            color="inherit"
+            loading={refreshing}
+            onClick={handleRefresh}
+            startIcon={<Iconify icon="solar:restart-bold" width={18} />}
+          >
+            รีเฟรช
+          </Button>
+        }
+      />
 
       <Box
         sx={{

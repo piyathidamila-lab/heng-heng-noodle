@@ -169,7 +169,7 @@ export function AdminOrdersView({ initialOrders, initialSessions }: Props) {
           </Box>
           <Chip
             icon={<Iconify icon={'solar:refresh-circle-bold' as IconifyName} width={19} />}
-            label="อัปเดตอัตโนมัติทุก 5 วินาที"
+            label="อัปเดตแบบเรียลไทม์"
             sx={{ color: 'common.white', bgcolor: 'rgba(255,255,255,0.16)' }}
           />
         </Stack>

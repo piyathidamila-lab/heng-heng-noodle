@@ -2,8 +2,8 @@
 
 import type { Dayjs } from 'dayjs';
 import type { BillSummary } from 'src/lib/order-service';
+import type { DateRangePresetKey } from 'src/utils/business-hours';
 
-import dayjs from 'dayjs';
 import { useMemo, useState, useEffect, useCallback } from 'react';
 
 import Box from '@mui/material/Box';
@@ -16,6 +16,7 @@ import Typography from '@mui/material/Typography';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 
 import { fTime, fDateTime } from 'src/utils/format-time';
+import { getDateRangePreset } from 'src/utils/business-hours';
 
 import { BillDialog } from '../orders/bill-dialog';
 import { listBillHistoryAdmin } from '../orders/table-session-actions';
@@ -24,7 +25,7 @@ import { listBillHistoryAdmin } from '../orders/table-session-actions';
 
 const DATE_FORMAT = 'YYYY-MM-DD';
 
-type PresetKey = 'today' | 'yesterday' | 'last7' | 'thisMonth' | 'lastMonth' | 'all';
+type PresetKey = DateRangePresetKey;
 
 const PRESETS: { value: PresetKey; label: string }[] = [
   { value: 'all', label: 'ทั้งหมด' },
@@ -34,30 +35,6 @@ const PRESETS: { value: PresetKey; label: string }[] = [
   { value: 'thisMonth', label: 'เดือนนี้' },
   { value: 'lastMonth', label: 'เดือนที่แล้ว' },
 ];
-
-function presetRange(preset: PresetKey): { from: Dayjs | null; to: Dayjs | null } {
-  const now = dayjs();
-
-  switch (preset) {
-    case 'today':
-      return { from: now.startOf('day'), to: now.endOf('day') };
-    case 'yesterday': {
-      const yesterday = now.subtract(1, 'day');
-      return { from: yesterday.startOf('day'), to: yesterday.endOf('day') };
-    }
-    case 'last7':
-      return { from: now.subtract(6, 'day').startOf('day'), to: now.endOf('day') };
-    case 'thisMonth':
-      return { from: now.startOf('month'), to: now.endOf('month') };
-    case 'lastMonth': {
-      const lastMonth = now.subtract(1, 'month');
-      return { from: lastMonth.startOf('month'), to: lastMonth.endOf('month') };
-    }
-    case 'all':
-    default:
-      return { from: null, to: null };
-  }
-}
 
 type Props = {
   initialBills: BillSummary[];
@@ -95,7 +72,7 @@ export function AdminBillsView({ initialBills }: Props) {
 
   const handlePreset = (value: PresetKey) => {
     setPreset(value);
-    const range = presetRange(value);
+    const range = getDateRangePreset(value);
     setFrom(range.from);
     setTo(range.to);
   };

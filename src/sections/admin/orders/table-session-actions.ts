@@ -99,3 +99,25 @@ export async function getTableBill(sessionId: string): Promise<TableBill> {
     promptPayQrUrl: settings.promptPayQrUrl,
   };
 }
+
+export type PaymentQr = {
+  promptPayPayload: string | null;
+  promptPayQrUrl: string | null;
+};
+
+/** Same QR logic as getTableBill, for a standalone amount — used by the takeaway payment dialog. */
+export async function getPaymentQr(total: number): Promise<PaymentQr> {
+  await requireOrderAccess();
+  const settings = await getShopSettings();
+
+  let promptPayPayload: string | null = null;
+  if (total > 0 && !settings.promptPayQrUrl) {
+    try {
+      promptPayPayload = await getPromptPayPayload(total);
+    } catch (error) {
+      if (!(error instanceof PromptPayNotConfiguredError)) throw error;
+    }
+  }
+
+  return { promptPayPayload, promptPayQrUrl: settings.promptPayQrUrl };
+}

@@ -1,8 +1,12 @@
 import type { Dayjs, OpUnitType } from 'dayjs';
 
 import dayjs from 'dayjs';
+import utc from 'dayjs/plugin/utc';
 import duration from 'dayjs/plugin/duration';
+import timezone from 'dayjs/plugin/timezone';
 import relativeTime from 'dayjs/plugin/relativeTime';
+
+import { SHOP_TZ } from 'src/utils/business-hours';
 
 // ----------------------------------------------------------------------
 
@@ -25,12 +29,25 @@ import relativeTime from 'dayjs/plugin/relativeTime';
  * dayjs().utc().format()
  */
 
+dayjs.extend(utc);
+dayjs.extend(timezone);
 dayjs.extend(duration);
 dayjs.extend(relativeTime);
 
 // ----------------------------------------------------------------------
 
 export type DateInput = Dayjs | Date | string | number | null | undefined;
+
+/**
+ * Every formatter below reads/writes in shop-local (Asia/Bangkok) time,
+ * not whatever timezone the server or the viewer's browser happens to be
+ * in — so a timestamp shows the same wall-clock time everywhere it's
+ * rendered, on the server during SSR (often UTC, e.g. on Vercel) and in
+ * every browser.
+ */
+function toShopTz(input: DateInput): Dayjs {
+  return dayjs(input).tz(SHOP_TZ);
+}
 
 export const FORMAT_PATTERNS = {
   dateTime: 'DD MMM YYYY h:mm a', // 17 Apr 2022 12:00 am
@@ -51,7 +68,7 @@ const INVALID_DATE = 'Invalid';
 // ----------------------------------------------------------------------
 
 export function today(template?: string): string {
-  return dayjs(new Date()).startOf('day').format(template);
+  return toShopTz(new Date()).startOf('day').format(template);
 }
 
 // ----------------------------------------------------------------------
@@ -65,7 +82,7 @@ export function today(template?: string): string {
 export function fDateTime(input: DateInput, template = FORMAT_PATTERNS.dateTime): string {
   if (!input) return '';
 
-  const date = dayjs(input);
+  const date = toShopTz(input);
   if (!date.isValid()) return INVALID_DATE;
 
   return date.format(template);
@@ -82,7 +99,7 @@ export function fDateTime(input: DateInput, template = FORMAT_PATTERNS.dateTime)
 export function fDate(input: DateInput, template = FORMAT_PATTERNS.date): string {
   if (!input) return '';
 
-  const date = dayjs(input);
+  const date = toShopTz(input);
   if (!date.isValid()) return INVALID_DATE;
 
   return date.format(template);
@@ -99,7 +116,7 @@ export function fDate(input: DateInput, template = FORMAT_PATTERNS.date): string
 export function fTime(input: DateInput, template = FORMAT_PATTERNS.time): string {
   if (!input) return '';
 
-  const date = dayjs(input);
+  const date = toShopTz(input);
   if (!date.isValid()) return INVALID_DATE;
 
   return date.format(template);
@@ -133,7 +150,7 @@ export function fTimestamp(input: DateInput): number | string {
 export function fToNow(input: DateInput): string {
   if (!input) return '';
 
-  const date = dayjs(input);
+  const date = toShopTz(input);
   if (!date.isValid()) return INVALID_DATE;
 
   return date.toNow(true);
@@ -150,9 +167,9 @@ export function fToNow(input: DateInput): string {
 export function fIsBetween(input: DateInput, start: DateInput, end: DateInput): boolean {
   if (!input || !start || !end) return false;
 
-  const inputDate = dayjs(input);
-  const startDate = dayjs(start);
-  const endDate = dayjs(end);
+  const inputDate = toShopTz(input);
+  const startDate = toShopTz(start);
+  const endDate = toShopTz(end);
 
   if (!inputDate.isValid() || !startDate.isValid() || !endDate.isValid()) {
     return false;
@@ -178,8 +195,8 @@ export function fIsBetween(input: DateInput, start: DateInput, end: DateInput): 
 export function fIsAfter(start: DateInput, end: DateInput): boolean {
   if (!start || !end) return false;
 
-  const startDate = dayjs(start);
-  const endDate = dayjs(end);
+  const startDate = toShopTz(start);
+  const endDate = toShopTz(end);
 
   if (!startDate.isValid() || !endDate.isValid()) {
     return false;
@@ -200,8 +217,8 @@ export function fIsAfter(start: DateInput, end: DateInput): boolean {
 export function fIsSame(start: DateInput, end: DateInput, unit: OpUnitType = 'year'): boolean {
   if (!start || !end) return false;
 
-  const startDate = dayjs(start);
-  const endDate = dayjs(end);
+  const startDate = toShopTz(start);
+  const endDate = toShopTz(end);
 
   if (!startDate.isValid() || !endDate.isValid()) {
     return false;
@@ -224,8 +241,8 @@ export function fIsSame(start: DateInput, end: DateInput, unit: OpUnitType = 'ye
 export function fDateRangeShortLabel(start: DateInput, end: DateInput, initial?: boolean): string {
   if (!start || !end) return '';
 
-  const startDate = dayjs(start);
-  const endDate = dayjs(end);
+  const startDate = toShopTz(start);
+  const endDate = toShopTz(end);
 
   if (!startDate.isValid() || !endDate.isValid() || startDate.isAfter(endDate)) {
     return INVALID_DATE;
