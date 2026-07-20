@@ -10,6 +10,7 @@ export type LoyaltyReward = {
   id: string;
   name: string;
   description: string;
+  imageUrl: string | null;
   starsCost: number;
   isActive: boolean;
   sortOrder: number;
@@ -20,19 +21,22 @@ type RewardRow = {
   id: string;
   name: string;
   description: string;
+  image_url: string | null;
   stars_cost: number;
   is_active: boolean;
   sort_order: number;
   created_at: string;
 };
 
-const REWARD_SELECT_COLUMNS = 'id, name, description, stars_cost, is_active, sort_order, created_at';
+const REWARD_SELECT_COLUMNS =
+  'id, name, description, image_url, stars_cost, is_active, sort_order, created_at';
 
 function mapRewardRow(row: RewardRow): LoyaltyReward {
   return {
     id: row.id,
     name: row.name,
     description: row.description,
+    imageUrl: row.image_url,
     starsCost: row.stars_cost,
     isActive: row.is_active,
     sortOrder: row.sort_order,
@@ -72,6 +76,7 @@ export async function listRewardsAdmin(): Promise<LoyaltyReward[]> {
 export type RewardInput = {
   name: string;
   description: string;
+  imageUrl: string | null;
   starsCost: number;
   isActive: boolean;
   sortOrder: number;
@@ -94,6 +99,7 @@ export async function createRewardRecord(input: RewardInput): Promise<LoyaltyRew
     .insert({
       name: input.name.trim(),
       description: input.description.trim(),
+      image_url: input.imageUrl,
       stars_cost: Math.round(input.starsCost),
       is_active: input.isActive,
       sort_order: input.sortOrder,
@@ -116,6 +122,7 @@ export async function updateRewardRecord(id: string, input: RewardInput): Promis
     .update({
       name: input.name.trim(),
       description: input.description.trim(),
+      image_url: input.imageUrl,
       stars_cost: Math.round(input.starsCost),
       is_active: input.isActive,
       sort_order: input.sortOrder,
@@ -194,7 +201,8 @@ export async function awardStarsForOrder(orderId: string): Promise<void> {
     .maybeSingle();
 
   if (error) throw error;
-  if (!order || !order.customer_id || order.stars_awarded || order.order_type !== 'takeaway') return;
+  if (!order || !order.customer_id || order.stars_awarded || order.order_type !== 'takeaway')
+    return;
 
   const stars = Math.floor(Number(order.total) / settings.loyalty.bahtPerStar);
 
@@ -301,7 +309,8 @@ export async function requestRedemption(customerId: string, rewardId: string): P
     .maybeSingle();
 
   if (rewardError) throw rewardError;
-  if (!reward || !reward.is_active) throw new LoyaltyValidationError('ของรางวัลนี้ไม่พร้อมให้แลกแล้ว');
+  if (!reward || !reward.is_active)
+    throw new LoyaltyValidationError('ของรางวัลนี้ไม่พร้อมให้แลกแล้ว');
 
   const { data: customer, error: customerError } = await supabase
     .from('customers')

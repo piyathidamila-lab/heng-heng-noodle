@@ -8,6 +8,7 @@ import type {
 } from 'src/lib/order-service';
 
 import { requireOrderAccess } from 'src/lib/auth-session';
+import { getShopSettings } from 'src/lib/shop-settings-service';
 import { getPromptPayPayload, PromptPayNotConfiguredError } from 'src/lib/promptpay';
 import {
   getBillHistory,
@@ -73,16 +74,17 @@ export type TableBill = {
   orders: OrderRecord[];
   total: number;
   promptPayPayload: string | null;
+  promptPayQrUrl: string | null;
 };
 
 export async function getTableBill(sessionId: string): Promise<TableBill> {
   await requireOrderAccess();
 
-  const orders = await getOrdersBySession(sessionId);
+  const [orders, settings] = await Promise.all([getOrdersBySession(sessionId), getShopSettings()]);
   const total = orders.reduce((sum, order) => sum + order.total, 0);
 
   let promptPayPayload: string | null = null;
-  if (total > 0) {
+  if (total > 0 && !settings.promptPayQrUrl) {
     try {
       promptPayPayload = await getPromptPayPayload(total);
     } catch (error) {
@@ -90,5 +92,10 @@ export async function getTableBill(sessionId: string): Promise<TableBill> {
     }
   }
 
-  return { orders, total, promptPayPayload };
+  return {
+    orders,
+    total,
+    promptPayPayload,
+    promptPayQrUrl: settings.promptPayQrUrl,
+  };
 }

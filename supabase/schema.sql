@@ -101,10 +101,12 @@ on conflict (value) do nothing;
 create table if not exists public.shop_settings (
   id boolean primary key default true check (id),
   name text not null default 'เฮงเฮง ก๋วยเตี๋ยว',
+  description text not null default '',
   logo_url text,
   address text not null default 'บ้านขามเรียง มหาสารคาม',
   phone text not null default '',
   promptpay_id text not null default '',
+  promptpay_qr_url text,
   business_hours jsonb not null default '{"mon":{"closed":false,"open":"08:00","close":"20:00"},"tue":{"closed":false,"open":"08:00","close":"20:00"},"wed":{"closed":false,"open":"08:00","close":"20:00"},"thu":{"closed":false,"open":"08:00","close":"20:00"},"fri":{"closed":false,"open":"08:00","close":"20:00"},"sat":{"closed":false,"open":"08:00","close":"20:00"},"sun":{"closed":false,"open":"08:00","close":"20:00"}}'::jsonb,
   special_closures jsonb not null default '[]'::jsonb,
   custom_order_enabled boolean not null default true,
@@ -117,7 +119,9 @@ create table if not exists public.shop_settings (
 );
 
 -- Re-running this schema upgrades databases created before custom orders existed.
+alter table public.shop_settings add column if not exists description text not null default '';
 alter table public.shop_settings add column if not exists logo_url text;
+alter table public.shop_settings add column if not exists promptpay_qr_url text;
 alter table public.shop_settings add column if not exists custom_order_enabled boolean not null default true;
 alter table public.shop_settings add column if not exists custom_order_title text not null default 'ความอร่อยเลือกเองได้';
 alter table public.shop_settings add column if not exists custom_order_steps jsonb not null default '[{"id":"noodle","title":"เลือกเส้น","options":[{"id":"noodle-1","label":"เส้นเล็ก","price":0},{"id":"noodle-2","label":"เส้นใหญ่","price":0},{"id":"noodle-3","label":"เส้นหมี่","price":0},{"id":"noodle-4","label":"วุ้นเส้น","price":0},{"id":"noodle-5","label":"มาม่า","price":0},{"id":"noodle-6","label":"บะหมี่","price":0}]},{"id":"topping","title":"เลือกเครื่อง","options":[{"id":"topping-1","label":"ลูกชิ้น","price":0},{"id":"topping-2","label":"หมูสด","price":0},{"id":"topping-3","label":"หมูเปื่อย","price":0},{"id":"topping-4","label":"ตับ","price":0}]},{"id":"size","title":"เลือกความจุใจ","options":[{"id":"size-1","label":"จุก","price":40},{"id":"size-2","label":"แน่น","price":50},{"id":"size-3","label":"แน่น...แน่น","price":60}]}]'::jsonb;
@@ -244,6 +248,59 @@ alter table public.orders enable row level security;
 -- and the admin dashboard reads orders through a cookie-gated server action.
 
 create index if not exists orders_session_id_idx on public.orders (session_id);
+
+-- Daily-reset order numbers: `seq` above is a global, ever-increasing
+-- bigserial (kept as-is for internal use); `daily_seq` is what customers and
+-- staff actually see on the ticket — it resets to 1 each shop-local calendar
+-- day so #0001 starts fresh every morning instead of climbing forever.
+create table if not exists public.daily_order_counters (
+  order_date date primary key,
+  last_seq integer not null default 0
+);
+
+alter table public.daily_order_counters enable row level security;
+-- No policies for anon/authenticated: only touched by next_daily_order_seq()
+-- below, called from the server via the service-role key.
+
+create or replace function public.next_daily_order_seq(p_order_date date)
+returns integer
+language sql
+as $$
+  insert into public.daily_order_counters (order_date, last_seq)
+  values (p_order_date, 1)
+  on conflict (order_date)
+  do update set last_seq = public.daily_order_counters.last_seq + 1
+  returning last_seq;
+$$;
+
+alter table public.orders add column if not exists daily_seq integer;
+
+-- Backfill daily_seq for orders that predate this feature, ranked within
+-- each shop-local calendar day by creation time.
+with ranked as (
+  select id,
+    row_number() over (
+      partition by (created_at at time zone 'Asia/Bangkok')::date
+      order by created_at, seq
+    ) as rn
+  from public.orders
+  where daily_seq is null
+)
+update public.orders o
+set daily_seq = ranked.rn
+from ranked
+where o.id = ranked.id;
+
+-- Seed each date's counter from the highest daily_seq already assigned, so
+-- new orders placed today continue after the backfilled ones instead of
+-- colliding with them.
+insert into public.daily_order_counters (order_date, last_seq)
+select (created_at at time zone 'Asia/Bangkok')::date, max(daily_seq)
+from public.orders
+where daily_seq is not null
+group by (created_at at time zone 'Asia/Bangkok')::date
+on conflict (order_date) do update
+  set last_seq = greatest(public.daily_order_counters.last_seq, excluded.last_seq);
 
 -- ----------------------------------------------------------------------
 -- order_items
@@ -416,12 +473,15 @@ create table if not exists public.loyalty_rewards (
   id uuid primary key default gen_random_uuid(),
   name text not null,
   description text not null default '',
+  image_url text,
   stars_cost integer not null check (stars_cost > 0),
   is_active boolean not null default true,
   sort_order integer not null default 0,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+alter table public.loyalty_rewards add column if not exists image_url text;
 
 alter table public.loyalty_rewards enable row level security;
 

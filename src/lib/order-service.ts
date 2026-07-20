@@ -1,10 +1,37 @@
+import type { RealtimeChannel } from '@supabase/supabase-js';
+import type { OrdersRealtimeEventName } from './realtime-events';
 import type { CustomOrderSelection } from './shop-settings-service';
+
+import { getShopDateKey } from 'src/utils/business-hours';
 
 import { getSupabaseAdmin } from './supabase-admin';
 import { getShopSettings } from './shop-settings-service';
 import { awardStarsForOrder, awardStarsForSession } from './loyalty-service';
+import { ORDERS_REALTIME_EVENTS, ORDERS_REALTIME_CHANNEL } from './realtime-events';
 
 // ----------------------------------------------------------------------
+
+let ordersRealtimeChannel: RealtimeChannel | null = null;
+
+/**
+ * Wakes up any staff/admin board subscribed to ORDERS_REALTIME_CHANNEL —
+ * sent over Realtime's REST broadcast endpoint (no persistent socket needed,
+ * so this works fine from a serverless invocation). Reuses one channel
+ * instance across calls instead of opening a new one per event. Never
+ * throws — a lost realtime nudge shouldn't fail the order mutation that
+ * triggered it; the client's fallback poll will still pick it up.
+ */
+async function broadcastOrdersEvent(
+  event: OrdersRealtimeEventName,
+  payload: Record<string, unknown> = {}
+): Promise<void> {
+  try {
+    ordersRealtimeChannel ??= getSupabaseAdmin().channel(ORDERS_REALTIME_CHANNEL);
+    await ordersRealtimeChannel.httpSend(event, payload);
+  } catch (error) {
+    console.error('Failed to broadcast orders realtime event', error);
+  }
+}
 
 export type OrderStatus = 'pending' | 'preparing' | 'served' | 'completed' | 'cancelled';
 export type PaymentStatus = 'unpaid' | 'paid';
@@ -209,6 +236,14 @@ export async function createOrderRecord(input: CreateOrderInput): Promise<OrderR
       ? await getOrCreateOpenSession(tableNumber, input.customerId)
       : null;
 
+  // Order number shown to customers/staff resets daily — atomically claimed
+  // via a DB function so two concurrent orders can never get the same number.
+  const { data: dailySeq, error: dailySeqError } = await supabase.rpc('next_daily_order_seq', {
+    p_order_date: getShopDateKey(),
+  });
+
+  if (dailySeqError) throw dailySeqError;
+
   const { data: order, error: orderError } = await supabase
     .from('orders')
     .insert({
@@ -218,10 +253,11 @@ export async function createOrderRecord(input: CreateOrderInput): Promise<OrderR
       table_number: tableNumber,
       note: input.note.trim(),
       total,
+      daily_seq: dailySeq,
       customer_id: input.orderType === 'takeaway' ? (input.customerId ?? null) : null,
     })
     .select(
-      'id, seq, customer_name, customer_phone, order_type, table_number, note, status, payment_status, paid_at, total, created_at'
+      'id, seq, daily_seq, customer_name, customer_phone, order_type, table_number, note, status, payment_status, paid_at, total, created_at'
     )
     .single();
 
@@ -233,9 +269,14 @@ export async function createOrderRecord(input: CreateOrderInput): Promise<OrderR
 
   if (itemsError) throw itemsError;
 
+  await broadcastOrdersEvent(ORDERS_REALTIME_EVENTS.newOrder, {
+    orderId: order.id,
+    orderType: order.order_type,
+  });
+
   return {
     id: order.id,
-    orderNumber: formatOrderNumber(order.seq),
+    orderNumber: formatOrderNumber(order.daily_seq ?? order.seq),
     customerName: order.customer_name,
     customerPhone: order.customer_phone ?? '',
     orderType: order.order_type,
@@ -256,11 +297,12 @@ export async function createOrderRecord(input: CreateOrderInput): Promise<OrderR
 }
 
 const ORDER_SELECT_COLUMNS =
-  'id, seq, customer_name, customer_phone, order_type, table_number, note, status, payment_status, paid_at, total, created_at, order_items (id, name, price, quantity)';
+  'id, seq, daily_seq, customer_name, customer_phone, order_type, table_number, note, status, payment_status, paid_at, total, created_at, order_items (id, name, price, quantity)';
 
 type OrderRow = {
   id: string;
   seq: number;
+  daily_seq: number | null;
   customer_name: string;
   customer_phone: string | null;
   order_type: 'dine-in' | 'takeaway';
@@ -277,7 +319,7 @@ type OrderRow = {
 function mapOrderRow(order: OrderRow): OrderRecord {
   return {
     id: order.id,
-    orderNumber: formatOrderNumber(order.seq),
+    orderNumber: formatOrderNumber(order.daily_seq ?? order.seq),
     customerName: order.customer_name,
     customerPhone: order.customer_phone ?? '',
     orderType: order.order_type,
@@ -418,7 +460,7 @@ export async function getOrdersByTable(tableNumber: string): Promise<TableOrderS
   const { data, error } = await supabase
     .from('orders')
     .select(
-      'id, seq, customer_name, status, total, created_at, order_items (id, name, price, quantity)'
+      'id, seq, daily_seq, customer_name, status, total, created_at, order_items (id, name, price, quantity)'
     )
     .eq('session_id', session.id)
     .neq('status', 'cancelled')
@@ -429,7 +471,7 @@ export async function getOrdersByTable(tableNumber: string): Promise<TableOrderS
 
   return (data ?? []).map((order) => ({
     id: order.id,
-    orderNumber: formatOrderNumber(order.seq),
+    orderNumber: formatOrderNumber(order.daily_seq ?? order.seq),
     customerName: order.customer_name,
     status: order.status,
     total: Number(order.total),
@@ -461,11 +503,12 @@ export type MemberOrderSummary = {
 };
 
 const MEMBER_ORDER_SELECT =
-  'id, seq, order_type, table_number, total, created_at, order_items (name, price, quantity, menu_items (emoji))';
+  'id, seq, daily_seq, order_type, table_number, total, created_at, order_items (name, price, quantity, menu_items (emoji))';
 
 type MemberOrderRow = {
   id: string;
   seq: number;
+  daily_seq: number | null;
   order_type: 'dine-in' | 'takeaway';
   table_number: string;
   total: number;
@@ -478,7 +521,7 @@ type MemberOrderRow = {
 function mapMemberOrderRow(order: MemberOrderRow): MemberOrderSummary {
   return {
     id: order.id,
-    orderNumber: formatOrderNumber(order.seq),
+    orderNumber: formatOrderNumber(order.daily_seq ?? order.seq),
     orderTime: order.created_at,
     orderType: order.order_type,
     tableNumber: order.table_number,
@@ -546,6 +589,8 @@ export async function updateOrderStatusRecord(id: string, status: OrderStatus): 
   const { error } = await supabase.from('orders').update({ status }).eq('id', id);
 
   if (error) throw error;
+
+  await broadcastOrdersEvent(ORDERS_REALTIME_EVENTS.orderUpdated);
 }
 
 /** Marks a takeaway order as paid without conflating payment with kitchen progress. */
@@ -576,6 +621,7 @@ export async function markTakeawayOrderPaidRecord(id: string): Promise<void> {
   if (error) throw error;
 
   await awardStarsForOrder(id);
+  await broadcastOrdersEvent(ORDERS_REALTIME_EVENTS.orderUpdated);
 }
 
 export type TableSessionSummary = {
@@ -632,6 +678,7 @@ export async function closeTableSessionRecord(id: string): Promise<void> {
   if (error) throw error;
 
   await awardStarsForSession(id);
+  await broadcastOrdersEvent(ORDERS_REALTIME_EVENTS.orderUpdated);
 }
 
 /**
@@ -690,6 +737,8 @@ export async function moveTableSessionRecord(
     .eq('session_id', sessionId);
 
   if (updateOrdersError) throw updateOrdersError;
+
+  await broadcastOrdersEvent(ORDERS_REALTIME_EVENTS.orderUpdated);
 }
 
 export type BillSummary = {

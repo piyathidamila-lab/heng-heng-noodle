@@ -644,6 +644,20 @@ export function OrderView({ items, categories, bestSellers, shop, member }: Prop
           </Stack>
         </Stack>
 
+        {shop.description.trim() && (
+          <Typography
+            variant="body2"
+            sx={{
+              mt: 1.25,
+              position: 'relative',
+              color: 'rgba(255,255,255,0.78)',
+              whiteSpace: 'pre-line',
+            }}
+          >
+            {shop.description}
+          </Typography>
+        )}
+
         {member && !qrTable && (
           <Stack
             direction="row"

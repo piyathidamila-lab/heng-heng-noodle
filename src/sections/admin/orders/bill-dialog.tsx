@@ -131,163 +131,191 @@ export function BillDialog({ session, variant = 'bill', onClose, onTableClosed }
 
   return (
     <>
-    <Dialog open={!!session} onClose={onClose} maxWidth="md" fullWidth>
-      <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        {isManage ? 'จัดการออเดอร์' : isClosed ? 'รายละเอียดบิล' : 'เช็คบิล'} โต๊ะ{' '}
-        {session?.tableNumber}
-        <IconButton onClick={onClose}>
-          <Iconify icon="mingcute:close-line" />
-        </IconButton>
-      </DialogTitle>
+      <Dialog open={!!session} onClose={onClose} maxWidth="md" fullWidth>
+        <DialogTitle
+          sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}
+        >
+          {isManage ? 'จัดการออเดอร์' : isClosed ? 'รายละเอียดบิล' : 'เช็คบิล'} โต๊ะ{' '}
+          {session?.tableNumber}
+          <IconButton onClick={onClose}>
+            <Iconify icon="mingcute:close-line" />
+          </IconButton>
+        </DialogTitle>
 
-      <DialogContent dividers>
-        {loading || !bill ? (
-          <Box sx={{ py: 6, textAlign: 'center' }}>
-            <CircularProgress size={28} />
-          </Box>
-        ) : (
-          <Grid container spacing={2.5}>
-            <Grid size={{ xs: isManage ? 12 : 7 }}>
-              {isManage && visibleOrders.length === 0 ? (
-                <Typography sx={{ color: 'text.secondary', textAlign: 'center', py: 4 }}>
-                  ไม่มีรายการที่ยังไม่เสร็จสิ้น
-                </Typography>
-              ) : (
-                <Stack spacing={1.5} divider={<Divider flexItem />}>
-                  {visibleOrders.map((order) => {
-                    const next = NEXT_STATUS[order.status];
-
-                    return (
-                      <Stack
-                        key={order.id}
-                        spacing={0.75}
-                        sx={{ opacity: order.status === 'cancelled' ? 0.5 : 1 }}
-                      >
-                        <Stack direction="row" alignItems="center" justifyContent="space-between">
-                          <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-                            {order.orderNumber} · {order.customerName} · {fTime(order.createdAt)}
-                          </Typography>
-                          <Chip
-                            size="small"
-                            label={STATUS_LABEL[order.status]}
-                            color={STATUS_COLOR[order.status]}
-                          />
-                        </Stack>
-
-                        {order.items.map((item) => (
-                          <Stack key={item.id} direction="row" justifyContent="space-between">
-                            <Typography variant="body2">
-                              {item.name} × {item.quantity}
-                            </Typography>
-                            <Typography variant="body2">
-                              {item.price * item.quantity} บาท
-                            </Typography>
-                          </Stack>
-                        ))}
-
-                        {!isClosed &&
-                          (next || order.status === 'pending' || order.status === 'preparing') && (
-                            <Stack direction="row" spacing={1} sx={{ mt: 0.5 }}>
-                              {next && (
-                                <Button
-                                  size="small"
-                                  variant="outlined"
-                                  fullWidth
-                                  onClick={() => handleAdvance(order)}
-                                >
-                                  {next.label}
-                                </Button>
-                              )}
-                              {(order.status === 'pending' || order.status === 'preparing') && (
-                                <Button
-                                  size="small"
-                                  color="error"
-                                  variant="text"
-                                  onClick={() => handleCancelOrder(order)}
-                                >
-                                  ยกเลิก
-                                </Button>
-                              )}
-                            </Stack>
-                          )}
-                      </Stack>
-                    );
-                  })}
-                </Stack>
-              )}
-
-              <Divider />
-
-              <Stack direction="row" alignItems="center" justifyContent="space-between">
-                <Typography variant="h6">ยอดรวม</Typography>
-                <Typography variant="h6" color="primary.main">
-                  {bill.total} บาท
-                </Typography>
-              </Stack>
-            </Grid>
-
-            {!isManage && (
-              <Grid size={{ xs: 5 }}>
-                {isClosed ? (
-                  <Stack alignItems="center" spacing={0.5} sx={{ py: 1 }}>
-                    <Chip size="small" color="default" label="ปิดบิลแล้ว (ชำระเงินแล้ว)" />
-                    {session?.closedAt && (
-                      <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-                        ปิดบิลเมื่อ {fDateTime(session.closedAt)}
-                      </Typography>
-                    )}
-                  </Stack>
+        <DialogContent dividers>
+          {loading || !bill ? (
+            <Box sx={{ py: 6, textAlign: 'center' }}>
+              <CircularProgress size={28} />
+            </Box>
+          ) : (
+            <Grid container spacing={2.5}>
+              <Grid size={{ xs: isManage ? 12 : 7 }}>
+                {isManage && visibleOrders.length === 0 ? (
+                  <Typography sx={{ color: 'text.secondary', textAlign: 'center', py: 4 }}>
+                    ไม่มีรายการที่ยังไม่เสร็จสิ้น
+                  </Typography>
                 ) : (
-                  <Stack alignItems="center" spacing={1.5}>
-                    {bill.promptPayPayload ? (
-                      <>
-                        <QRCodeSVG
-                          value={bill.promptPayPayload}
-                          size={200}
-                          level="M"
-                          marginSize={2}
-                        />
-                        <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-                          สแกนด้วยแอปธนาคารเพื่อจ่ายผ่านพร้อมเพย์
-                        </Typography>
-                      </>
-                    ) : (
-                      <Typography
-                        variant="caption"
-                        sx={{ color: 'warning.dark', textAlign: 'center' }}
-                      >
-                        ยังไม่ได้ตั้งค่าเลขพร้อมเพย์ของร้าน (PROMPTPAY_ID)
-                      </Typography>
-                    )}
+                  <Stack spacing={1.5} divider={<Divider flexItem />}>
+                    {visibleOrders.map((order) => {
+                      const next = NEXT_STATUS[order.status];
+
+                      return (
+                        <Stack
+                          key={order.id}
+                          spacing={0.75}
+                          sx={{ opacity: order.status === 'cancelled' ? 0.5 : 1 }}
+                        >
+                          <Stack direction="row" alignItems="center" justifyContent="space-between">
+                            <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+                              {order.orderNumber} · {order.customerName} · {fTime(order.createdAt)}
+                            </Typography>
+                            <Chip
+                              size="small"
+                              label={STATUS_LABEL[order.status]}
+                              color={STATUS_COLOR[order.status]}
+                            />
+                          </Stack>
+
+                          {order.items.map((item) => (
+                            <Stack key={item.id} direction="row" justifyContent="space-between">
+                              <Typography variant="body2">
+                                {item.name} × {item.quantity}
+                              </Typography>
+                              <Typography variant="body2">
+                                {item.price * item.quantity} บาท
+                              </Typography>
+                            </Stack>
+                          ))}
+
+                          {!isClosed &&
+                            (next ||
+                              order.status === 'pending' ||
+                              order.status === 'preparing') && (
+                              <Stack direction="row" spacing={1} sx={{ mt: 0.5 }}>
+                                {next && (
+                                  <Button
+                                    size="small"
+                                    variant="outlined"
+                                    fullWidth
+                                    onClick={() => handleAdvance(order)}
+                                  >
+                                    {next.label}
+                                  </Button>
+                                )}
+                                {(order.status === 'pending' || order.status === 'preparing') && (
+                                  <Button
+                                    size="small"
+                                    color="error"
+                                    variant="text"
+                                    onClick={() => handleCancelOrder(order)}
+                                  >
+                                    ยกเลิก
+                                  </Button>
+                                )}
+                              </Stack>
+                            )}
+                        </Stack>
+                      );
+                    })}
                   </Stack>
                 )}
+
+                <Divider />
+
+                <Stack direction="row" alignItems="center" justifyContent="space-between">
+                  <Typography variant="h6">ยอดรวม</Typography>
+                  <Typography variant="h6" color="primary.main">
+                    {bill.total} บาท
+                  </Typography>
+                </Stack>
               </Grid>
-            )}
-          </Grid>
-        )}
-      </DialogContent>
 
-      <DialogActions sx={{ px: 3, py: 2 }}>
-        {isManage || isClosed ? (
-          <Button fullWidth variant="outlined" size="large" onClick={onClose}>
-            ปิดหน้าต่าง
-          </Button>
-        ) : (
-          <Button
-            fullWidth
-            variant="contained"
-            size="large"
-            loading={closing}
-            onClick={handleCloseTable}
-            startIcon={<Iconify icon="solar:check-circle-bold" />}
-          >
-            ปิดโต๊ะ (ชำระเงินแล้ว)
-          </Button>
-        )}
-      </DialogActions>
-    </Dialog>
+              {!isManage && (
+                <Grid size={{ xs: 5 }}>
+                  {isClosed ? (
+                    <Stack alignItems="center" spacing={0.5} sx={{ py: 1 }}>
+                      <Chip size="small" color="default" label="ปิดบิลแล้ว (ชำระเงินแล้ว)" />
+                      {session?.closedAt && (
+                        <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+                          ปิดบิลเมื่อ {fDateTime(session.closedAt)}
+                        </Typography>
+                      )}
+                    </Stack>
+                  ) : (
+                    <Stack alignItems="center" spacing={1.5}>
+                      {bill.promptPayQrUrl ? (
+                        <>
+                          <Box
+                            component="img"
+                            src={bill.promptPayQrUrl}
+                            alt="QR Code รับเงินของร้าน"
+                            sx={{
+                              width: 220,
+                              height: 220,
+                              p: 1,
+                              objectFit: 'contain',
+                              borderRadius: 2,
+                              border: '1px solid',
+                              borderColor: 'divider',
+                              bgcolor: 'common.white',
+                            }}
+                          />
+                          <Typography
+                            variant="caption"
+                            sx={{ color: 'text.secondary', textAlign: 'center' }}
+                          >
+                            สแกน QR ของร้านและตรวจสอบยอด {bill.total.toLocaleString('th-TH')} บาท
+                          </Typography>
+                        </>
+                      ) : bill.promptPayPayload ? (
+                        <>
+                          <QRCodeSVG
+                            value={bill.promptPayPayload}
+                            size={200}
+                            level="M"
+                            marginSize={2}
+                          />
+                          <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+                            สแกนด้วยแอปธนาคารเพื่อจ่ายผ่านพร้อมเพย์
+                          </Typography>
+                        </>
+                      ) : (
+                        <Typography
+                          variant="caption"
+                          sx={{ color: 'warning.dark', textAlign: 'center' }}
+                        >
+                          ยังไม่ได้ตั้งค่าเลขพร้อมเพย์ของร้าน (PROMPTPAY_ID)
+                        </Typography>
+                      )}
+                    </Stack>
+                  )}
+                </Grid>
+              )}
+            </Grid>
+          )}
+        </DialogContent>
 
-    {confirmDialog}
-  </>
+        <DialogActions sx={{ px: 3, py: 2 }}>
+          {isManage || isClosed ? (
+            <Button fullWidth variant="outlined" size="large" onClick={onClose}>
+              ปิดหน้าต่าง
+            </Button>
+          ) : (
+            <Button
+              fullWidth
+              variant="contained"
+              size="large"
+              loading={closing}
+              onClick={handleCloseTable}
+              startIcon={<Iconify icon="solar:check-circle-bold" />}
+            >
+              ปิดโต๊ะ (ชำระเงินแล้ว)
+            </Button>
+          )}
+        </DialogActions>
+      </Dialog>
+
+      {confirmDialog}
+    </>
   );
 }

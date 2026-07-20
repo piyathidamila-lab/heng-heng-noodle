@@ -23,7 +23,10 @@ import { logoutMemberAction, requestRedemptionAction } from './loyalty-actions';
 
 // ----------------------------------------------------------------------
 
-const STATUS_LABEL: Record<LoyaltyRedemption['status'], { label: string; color: 'warning' | 'success' | 'error' }> = {
+const STATUS_LABEL: Record<
+  LoyaltyRedemption['status'],
+  { label: string; color: 'warning' | 'success' | 'error' }
+> = {
   pending: { label: 'รอดำเนินการ', color: 'warning' },
   fulfilled: { label: 'สำเร็จ', color: 'success' },
   rejected: { label: 'ถูกปฏิเสธ', color: 'error' },
@@ -129,7 +132,6 @@ export function MemberDashboard({ member, rewards, myRedemptions }: Props) {
               key={reward.id}
               direction="row"
               alignItems="center"
-              justifyContent="space-between"
               spacing={1.5}
               sx={{
                 p: 2,
@@ -139,14 +141,42 @@ export function MemberDashboard({ member, rewards, myRedemptions }: Props) {
                 borderColor: 'grey.200',
               }}
             >
-              <Box sx={{ minWidth: 0 }}>
+              <Box
+                sx={{
+                  width: 76,
+                  height: 76,
+                  display: 'grid',
+                  placeItems: 'center',
+                  flexShrink: 0,
+                  overflow: 'hidden',
+                  borderRadius: 2,
+                  bgcolor: 'grey.100',
+                  backgroundImage: reward.imageUrl ? `url(${reward.imageUrl})` : undefined,
+                  backgroundSize: 'cover',
+                  backgroundPosition: 'center',
+                }}
+              >
+                {!reward.imageUrl && (
+                  <Iconify
+                    icon={'solar:gift-bold' as IconifyName}
+                    width={34}
+                    color="text.disabled"
+                  />
+                )}
+              </Box>
+              <Box sx={{ flex: 1, minWidth: 0 }}>
                 <Typography variant="subtitle1">{reward.name}</Typography>
                 {reward.description && (
                   <Typography variant="body2" sx={{ color: 'text.secondary' }}>
                     {reward.description}
                   </Typography>
                 )}
-                <Chip size="small" label={`${reward.starsCost} ดาว`} color="warning" sx={{ mt: 0.5 }} />
+                <Chip
+                  size="small"
+                  label={`${reward.starsCost} ดาว`}
+                  color="warning"
+                  sx={{ mt: 0.5 }}
+                />
               </Box>
               <Button
                 variant="contained"

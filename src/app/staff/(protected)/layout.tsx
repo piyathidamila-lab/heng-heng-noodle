@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation';
 
+import { getOrders } from 'src/lib/order-service';
 import { getCurrentUser } from 'src/lib/auth-session';
 import { getShopSettings } from 'src/lib/shop-settings-service';
 
@@ -19,11 +20,16 @@ export default async function Layout({ children }: Props) {
     redirect('/login');
   }
 
-  const settings = await getShopSettings();
+  const [settings, orders] = await Promise.all([getShopSettings(), getOrders()]);
 
   return (
     <StaffThemeProvider>
-      <StaffShell shopName={settings.name} displayName={user.displayName}>
+      <StaffShell
+        shopName={settings.name}
+        displayName={user.displayName}
+        initialIsOpen={settings.manuallyOpen}
+        initialOrders={orders}
+      >
         {children}
       </StaffShell>
     </StaffThemeProvider>

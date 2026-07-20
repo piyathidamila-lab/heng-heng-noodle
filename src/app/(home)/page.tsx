@@ -19,7 +19,7 @@ export async function generateMetadata(): Promise<Metadata> {
 
   return {
     title: `สั่งอาหาร | ${settings.name}`,
-    description: `สั่งอาหารออนไลน์จาก${settings.name} ${settings.address}`,
+    description: settings.description || `สั่งอาหารออนไลน์จาก${settings.name} ${settings.address}`,
   };
 }
 

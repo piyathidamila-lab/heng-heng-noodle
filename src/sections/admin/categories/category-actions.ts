@@ -10,6 +10,7 @@ import {
   moveCategoryRecord,
   createCategoryRecord,
   deleteCategoryRecord,
+  reorderCategoryRecords,
   updateCategoryLabelRecord,
 } from 'src/lib/category-service';
 
@@ -43,5 +44,11 @@ export async function deleteCategory(id: string): Promise<void> {
 export async function moveCategory(id: string, direction: 'up' | 'down'): Promise<void> {
   await requireAdmin();
   await moveCategoryRecord(id, direction);
+  revalidatePath('/');
+}
+
+export async function reorderCategories(orderedIds: string[]): Promise<void> {
+  await requireAdmin();
+  await reorderCategoryRecords(orderedIds);
   revalidatePath('/');
 }

@@ -16,10 +16,12 @@ export type { DayHours, WeekdayKey, BusinessHours } from 'src/utils/business-hou
 
 export type ShopSettings = {
   name: string;
+  description: string;
   logoUrl: string | null;
   address: string;
   phone: string;
   promptPayId: string;
+  promptPayQrUrl: string | null;
   businessHours: BusinessHours;
   specialClosures: SpecialClosure[];
   customOrder: CustomOrderConfig;
@@ -55,6 +57,7 @@ export type CustomOrderOption = {
 export type CustomOrderStep = {
   id: string;
   title: string;
+  hasPrice: boolean;
   options: CustomOrderOption[];
 };
 
@@ -71,6 +74,12 @@ export type CustomOrderSelection = {
 export type ShopSettingsInput = ShopSettings;
 
 const SELECT_COLUMNS =
+  'name, description, logo_url, address, phone, promptpay_id, promptpay_qr_url, business_hours, special_closures, custom_order_enabled, custom_order_title, custom_order_steps, announcement_enabled, announcement_message, loyalty_enabled, loyalty_baht_per_star, is_open';
+
+const WITHOUT_PROMPTPAY_QR_SELECT_COLUMNS =
+  'name, description, logo_url, address, phone, promptpay_id, business_hours, special_closures, custom_order_enabled, custom_order_title, custom_order_steps, announcement_enabled, announcement_message, loyalty_enabled, loyalty_baht_per_star, is_open';
+
+const WITHOUT_DESCRIPTION_SELECT_COLUMNS =
   'name, logo_url, address, phone, promptpay_id, business_hours, special_closures, custom_order_enabled, custom_order_title, custom_order_steps, announcement_enabled, announcement_message, loyalty_enabled, loyalty_baht_per_star, is_open';
 
 const WITHOUT_LOGO_SELECT_COLUMNS =
@@ -81,10 +90,12 @@ const LEGACY_SELECT_COLUMNS =
 
 type ShopSettingsRow = {
   name: string;
+  description?: string;
   logo_url?: string | null;
   address: string;
   phone: string;
   promptpay_id: string;
+  promptpay_qr_url?: string | null;
   business_hours: unknown;
   special_closures?: unknown;
   custom_order_enabled: boolean;
@@ -101,6 +112,7 @@ const DEFAULT_CUSTOM_ORDER_STEPS: CustomOrderStep[] = [
   {
     id: 'noodle',
     title: 'เลือกเส้น',
+    hasPrice: false,
     options: ['เส้นเล็ก', 'เส้นใหญ่', 'เส้นหมี่', 'วุ้นเส้น', 'มาม่า', 'บะหมี่'].map(
       (label, index) => ({ id: `noodle-${index + 1}`, label, price: 0 })
     ),
@@ -108,6 +120,7 @@ const DEFAULT_CUSTOM_ORDER_STEPS: CustomOrderStep[] = [
   {
     id: 'topping',
     title: 'เลือกเครื่อง',
+    hasPrice: false,
     options: ['ลูกชิ้น', 'หมูสด', 'หมูเปื่อย', 'ตับ'].map((label, index) => ({
       id: `topping-${index + 1}`,
       label,
@@ -117,6 +130,7 @@ const DEFAULT_CUSTOM_ORDER_STEPS: CustomOrderStep[] = [
   {
     id: 'spicy',
     title: 'เลือกความเผ็ด',
+    hasPrice: false,
     options: ['ไม่เผ็ด', 'เผ็ดน้อย', 'เผ็ดปานกลาง', 'เผ็ดมาก'].map((label, index) => ({
       id: `spicy-${index + 1}`,
       label,
@@ -126,6 +140,7 @@ const DEFAULT_CUSTOM_ORDER_STEPS: CustomOrderStep[] = [
   {
     id: 'size',
     title: 'เลือกความจุใจ',
+    hasPrice: true,
     options: [
       { id: 'size-1', label: 'จุก', price: 40 },
       { id: 'size-2', label: 'แน่น', price: 50 },
@@ -142,6 +157,12 @@ function normalizeCustomOrderSteps(value: unknown): CustomOrderStep[] {
     .map((step, stepIndex) => {
       if (!step || typeof step !== 'object') return null;
       const record = step as Record<string, unknown>;
+      const rawOptions = Array.isArray(record.options) ? record.options : [];
+      const inferredHasPrice = rawOptions.some((option) => {
+        if (!option || typeof option !== 'object') return false;
+        return Number((option as Record<string, unknown>).price) > 0;
+      });
+      const hasPrice = typeof record.hasPrice === 'boolean' ? record.hasPrice : inferredHasPrice;
       const options = Array.isArray(record.options)
         ? record.options
             .slice(0, 30)
@@ -156,7 +177,7 @@ function normalizeCustomOrderSteps(value: unknown): CustomOrderStep[] {
               return {
                 id: String(optionRecord.id ?? `option-${optionIndex + 1}`).slice(0, 80),
                 label,
-                price: Math.max(0, Number(optionRecord.price) || 0),
+                price: hasPrice ? Math.max(0, Number(optionRecord.price) || 0) : 0,
               };
             })
             .filter((option): option is CustomOrderOption => option !== null)
@@ -169,6 +190,7 @@ function normalizeCustomOrderSteps(value: unknown): CustomOrderStep[] {
       return {
         id: String(record.id ?? `step-${stepIndex + 1}`).slice(0, 80),
         title,
+        hasPrice,
         options,
       };
     })
@@ -231,10 +253,12 @@ function mapRow(row: ShopSettingsRow): ShopSettings {
 
   return {
     name: row.name,
+    description: row.description ?? '',
     logoUrl: row.logo_url ?? null,
     address: row.address,
     phone: row.phone,
     promptPayId: row.promptpay_id,
+    promptPayQrUrl: row.promptpay_qr_url ?? null,
     businessHours: normalizeBusinessHours(row.business_hours),
     specialClosures,
     customOrder: {
@@ -258,10 +282,12 @@ function mapRow(row: ShopSettingsRow): ShopSettings {
 
 const DEFAULT_SETTINGS: ShopSettings = {
   name: 'เฮงเฮง ก๋วยเตี๋ยว',
+  description: '',
   logoUrl: null,
   address: 'บ้านขามเรียง มหาสารคาม',
   phone: '',
   promptPayId: '',
+  promptPayQrUrl: null,
   businessHours: DEFAULT_BUSINESS_HOURS,
   specialClosures: [],
   customOrder: {
@@ -287,10 +313,26 @@ export async function getShopSettings(): Promise<ShopSettings> {
   const supabase = getSupabasePublic();
   const variants = [
     { columns: SELECT_COLUMNS, defaults: {} },
-    { columns: WITHOUT_LOGO_SELECT_COLUMNS, defaults: { logo_url: null } },
+    {
+      columns: WITHOUT_PROMPTPAY_QR_SELECT_COLUMNS,
+      defaults: { promptpay_qr_url: null },
+    },
+    {
+      columns: WITHOUT_DESCRIPTION_SELECT_COLUMNS,
+      defaults: { description: '', promptpay_qr_url: null },
+    },
+    {
+      columns: WITHOUT_LOGO_SELECT_COLUMNS,
+      defaults: { description: '', logo_url: null, promptpay_qr_url: null },
+    },
     {
       columns: LEGACY_SELECT_COLUMNS,
-      defaults: { logo_url: null, special_closures: [] },
+      defaults: {
+        description: '',
+        logo_url: null,
+        promptpay_qr_url: null,
+        special_closures: [],
+      },
     },
   ];
 
@@ -318,10 +360,12 @@ export async function updateShopSettingsRecord(input: ShopSettingsInput): Promis
     .from('shop_settings')
     .update({
       name: input.name.trim(),
+      description: input.description.trim().slice(0, 500),
       logo_url: input.logoUrl,
       address: input.address.trim(),
       phone: input.phone.trim(),
       promptpay_id: input.promptPayId.trim(),
+      promptpay_qr_url: input.promptPayQrUrl,
       business_hours: normalizeBusinessHours(input.businessHours),
       special_closures: normalizeSpecialClosures(input.specialClosures),
       custom_order_enabled: input.customOrder.enabled,

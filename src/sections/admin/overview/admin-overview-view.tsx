@@ -1,7 +1,7 @@
 'use client';
 
 import type { IconifyName } from 'src/components/iconify';
-import type { SalesPeriod, SalesSummary, BestSellerItem } from 'src/lib/analytics-service';
+import type { SalesPeriod, TrafficPoint, DashboardAnalytics } from 'src/lib/analytics-service';
 
 import { useState } from 'react';
 
@@ -18,22 +18,15 @@ import { Iconify } from 'src/components/iconify';
 
 const PERIOD_TABS: SalesPeriod[] = ['today', 'week', 'month'];
 
-const PERIOD_META: Record<
-  SalesPeriod,
-  { label: string; caption: string; icon: IconifyName }
-> = {
-  today: {
-    label: 'วันนี้',
-    caption: 'ตั้งแต่ 00:00 น.',
-    icon: 'solar:clock-circle-bold',
-  },
+const PERIOD_META: Record<SalesPeriod, { label: string; caption: string; icon: IconifyName }> = {
+  today: { label: 'รายวัน', caption: 'วันนี้ ตั้งแต่ 00:00 น.', icon: 'solar:clock-circle-bold' },
   week: {
-    label: 'สัปดาห์นี้',
+    label: 'รายสัปดาห์',
     caption: 'ตั้งแต่ต้นสัปดาห์',
     icon: 'solar:calendar-date-bold',
   },
   month: {
-    label: 'เดือนนี้',
+    label: 'รายเดือน',
     caption: 'ตั้งแต่ต้นเดือน',
     icon: 'solar:calendar-bold' as IconifyName,
   },
@@ -47,23 +40,37 @@ function formatNumber(value: number): string {
   return value.toLocaleString('th-TH');
 }
 
+function maxCount(points: TrafficPoint[]): number {
+  return Math.max(...points.map((point) => point.orderCount), 1);
+}
+
 type Props = {
-  summary: SalesSummary;
-  bestSellers: Record<SalesPeriod, BestSellerItem[]>;
+  analytics: DashboardAnalytics;
 };
 
-export function AdminOverviewView({ summary, bestSellers }: Props) {
+export function AdminOverviewView({ analytics }: Props) {
   const [period, setPeriod] = useState<SalesPeriod>('today');
-
-  const items = bestSellers[period];
-  const selectedSummary = summary[period];
+  const data = analytics[period];
   const periodMeta = PERIOD_META[period];
-  const maxQuantity = items[0]?.quantity ?? 0;
-  const totalDishes = items.reduce((sum, item) => sum + item.quantity, 0);
-  const averageOrder =
-    selectedSummary.orderCount > 0
-      ? Math.round(selectedSummary.total / selectedSummary.orderCount)
-      : 0;
+  const averageOrder = data.summary.orderCount
+    ? Math.round(data.summary.total / data.summary.orderCount)
+    : 0;
+  const maxBestSeller = Math.max(data.bestSellers[0]?.quantity ?? 0, 1);
+  const maxTimeOrders = maxCount(data.timeTraffic);
+  const maxDayOrders = maxCount(data.dayTraffic);
+  const observedDays = data.dayTraffic.filter((day) => day.observed);
+  const busiestDay = observedDays.reduce<TrafficPoint | null>(
+    (current, day) => (!current || day.orderCount > current.orderCount ? day : current),
+    null
+  );
+  const quietestDay = observedDays.reduce<TrafficPoint | null>(
+    (current, day) => (!current || day.orderCount < current.orderCount ? day : current),
+    null
+  );
+  const busiestTime = data.timeTraffic.reduce<TrafficPoint | null>(
+    (current, time) => (!current || time.orderCount > current.orderCount ? time : current),
+    null
+  );
 
   return (
     <Box sx={{ pb: 4 }}>
@@ -71,14 +78,14 @@ export function AdminOverviewView({ summary, bestSellers }: Props) {
         direction={{ xs: 'column', sm: 'row' }}
         alignItems={{ xs: 'flex-start', sm: 'center' }}
         justifyContent="space-between"
-        gap={2}
+        spacing={2}
         sx={{ mb: 3 }}
       >
         <Stack direction="row" alignItems="center" spacing={1.5}>
           <Box
             sx={{
-              width: 48,
-              height: 48,
+              width: 50,
+              height: 50,
               display: 'grid',
               placeItems: 'center',
               borderRadius: 2.25,
@@ -86,12 +93,12 @@ export function AdminOverviewView({ summary, bestSellers }: Props) {
               bgcolor: 'primary.lighter',
             }}
           >
-            <Iconify icon={'solar:chart-2-bold-duotone' as IconifyName} width={27} />
+            <Iconify icon={'solar:chart-2-bold-duotone' as IconifyName} width={28} />
           </Box>
           <Box>
-            <Typography variant="h4">ภาพรวมร้าน</Typography>
+            <Typography variant="h4">ภาพรวมยอดขาย</Typography>
             <Typography variant="body2" sx={{ mt: 0.25, color: 'text.secondary' }}>
-              สรุปยอดขายและเมนูยอดนิยมในที่เดียว
+              ดูยอดเงิน เมนูยอดนิยม และช่วงที่ลูกค้าสั่งอาหาร
             </Typography>
           </Box>
         </Stack>
@@ -99,18 +106,14 @@ export function AdminOverviewView({ summary, bestSellers }: Props) {
         <Chip
           icon={<Iconify icon="solar:check-circle-bold" width={17} />}
           label="ไม่รวมออเดอร์ที่ยกเลิก"
-          sx={{
-            color: 'success.dark',
-            fontWeight: 700,
-            bgcolor: 'success.lighter',
-            '& .MuiChip-icon': { color: 'inherit' },
-          }}
+          color="success"
+          variant="outlined"
         />
       </Stack>
 
       <Box
         role="tablist"
-        aria-label="เลือกช่วงเวลาของข้อมูลภาพรวม"
+        aria-label="เลือกช่วงเวลาของภาพรวมยอดขาย"
         sx={{
           p: 0.75,
           mb: 2.5,
@@ -126,25 +129,24 @@ export function AdminOverviewView({ summary, bestSellers }: Props) {
       >
         {PERIOD_TABS.map((itemPeriod) => {
           const meta = PERIOD_META[itemPeriod];
-          const isSelected = itemPeriod === period;
+          const selected = period === itemPeriod;
 
           return (
             <ButtonBase
               key={itemPeriod}
               role="tab"
-              aria-selected={isSelected}
+              aria-selected={selected}
               onClick={() => setPeriod(itemPeriod)}
               sx={{
                 px: 1,
                 py: 1.25,
                 borderRadius: 2,
-                color: isSelected ? 'common.white' : 'text.primary',
-                bgcolor: isSelected ? 'primary.main' : 'transparent',
-                transition: (theme) => theme.transitions.create(['color', 'background-color']),
-                '&:hover': { bgcolor: isSelected ? 'primary.dark' : 'grey.100' },
+                color: selected ? 'common.white' : 'text.primary',
+                bgcolor: selected ? 'primary.main' : 'transparent',
+                '&:hover': { bgcolor: selected ? 'primary.dark' : 'grey.100' },
               }}
             >
-              <Stack direction="row" spacing={0.75} alignItems="center" justifyContent="center">
+              <Stack direction="row" alignItems="center" justifyContent="center" spacing={0.75}>
                 <Iconify icon={meta.icon} width={19} />
                 <Box sx={{ textAlign: 'left' }}>
                   <Typography variant="subtitle2" sx={{ color: 'inherit' }}>
@@ -155,7 +157,7 @@ export function AdminOverviewView({ summary, bestSellers }: Props) {
                     sx={{
                       display: { xs: 'none', sm: 'block' },
                       color: 'inherit',
-                      opacity: isSelected ? 0.78 : 0.6,
+                      opacity: selected ? 0.76 : 0.58,
                     }}
                   >
                     {meta.caption}
@@ -180,7 +182,7 @@ export function AdminOverviewView({ summary, bestSellers }: Props) {
             position: 'relative',
             overflow: 'hidden',
             gridColumn: { xs: '1 / -1', lg: 'span 2' },
-            minHeight: { xs: 190, sm: 210 },
+            minHeight: 205,
             p: { xs: 2.5, sm: 3 },
             borderRadius: 3,
             color: 'common.white',
@@ -191,71 +193,40 @@ export function AdminOverviewView({ summary, bestSellers }: Props) {
           <Box
             sx={{
               position: 'absolute',
-              width: 190,
-              height: 190,
-              top: -100,
-              right: -45,
+              width: 210,
+              height: 210,
+              top: -105,
+              right: -50,
               borderRadius: '50%',
               bgcolor: 'rgba(255,255,255,0.08)',
             }}
           />
-          <Box
-            sx={{
-              position: 'absolute',
-              width: 100,
-              height: 100,
-              bottom: -55,
-              left: -25,
-              borderRadius: '50%',
-              bgcolor: 'rgba(255,213,79,0.10)',
-            }}
-          />
-
           <Stack sx={{ position: 'relative', height: 1 }} justifyContent="space-between">
             <Stack direction="row" alignItems="center" justifyContent="space-between">
-              <Stack direction="row" alignItems="center" spacing={1}>
-                <Box
-                  sx={{
-                    width: 38,
-                    height: 38,
-                    display: 'grid',
-                    placeItems: 'center',
-                    borderRadius: 1.75,
-                    bgcolor: 'rgba(255,255,255,0.14)',
-                  }}
-                >
-                  <Iconify icon="solar:wad-of-money-bold" width={22} />
-                </Box>
-                <Box>
-                  <Typography variant="subtitle1" sx={{ color: 'common.white' }}>
-                    ยอดขาย{periodMeta.label}
-                  </Typography>
-                  <Typography variant="caption" sx={{ opacity: 0.72 }}>
-                    {periodMeta.caption}
-                  </Typography>
-                </Box>
-              </Stack>
-              <Chip
-                size="small"
-                label="ยอดสุทธิ"
-                sx={{ color: '#7A1010', fontWeight: 800, bgcolor: '#FFD976' }}
-              />
+              <Box>
+                <Typography variant="subtitle1" sx={{ color: 'inherit' }}>
+                  ยอดขาย{periodMeta.label}
+                </Typography>
+                <Typography variant="caption" sx={{ opacity: 0.7 }}>
+                  {periodMeta.caption}
+                </Typography>
+              </Box>
+              <Iconify icon="solar:wad-of-money-bold" width={34} />
             </Stack>
-
             <Box>
               <Typography
                 sx={{
-                  color: 'common.white',
-                  fontSize: { xs: 36, sm: 46 },
+                  color: 'inherit',
+                  fontSize: { xs: 38, sm: 48 },
                   fontWeight: 800,
                   lineHeight: 1.1,
                   letterSpacing: -1,
                 }}
               >
-                {formatBaht(selectedSummary.total)}
+                {formatBaht(data.summary.total)}
               </Typography>
               <Typography variant="body2" sx={{ mt: 0.75, opacity: 0.74 }}>
-                จาก {formatNumber(selectedSummary.orderCount)} ออเดอร์ที่ไม่ถูกยกเลิก
+                จาก {formatNumber(data.summary.orderCount)} ออเดอร์
               </Typography>
             </Box>
           </Stack>
@@ -264,28 +235,26 @@ export function AdminOverviewView({ summary, bestSellers }: Props) {
         {[
           {
             label: 'จำนวนออเดอร์',
-            caption: `ออเดอร์${periodMeta.label}`,
-            value: formatNumber(selectedSummary.orderCount),
-            unit: 'รายการ',
+            value: formatNumber(data.summary.orderCount),
+            unit: 'ออเดอร์',
             icon: 'solar:bill-list-bold-duotone' as IconifyName,
             color: '#1976D2',
-            softColor: '#EAF4FF',
+            background: '#EAF4FF',
           },
           {
-            label: 'ยอดเฉลี่ย',
-            caption: 'ต่อหนึ่งออเดอร์',
+            label: 'ยอดเฉลี่ยต่อออเดอร์',
             value: formatBaht(averageOrder),
             unit: '',
             icon: 'solar:cup-star-bold' as IconifyName,
             color: '#B76E00',
-            softColor: '#FFF6DD',
+            background: '#FFF6DD',
           },
         ].map((metric) => (
           <Stack
             key={metric.label}
             justifyContent="space-between"
             sx={{
-              minHeight: { xs: 154, sm: 210 },
+              minHeight: { xs: 160, sm: 205 },
               p: { xs: 1.75, sm: 2.5 },
               borderRadius: 3,
               border: '1px solid',
@@ -302,19 +271,14 @@ export function AdminOverviewView({ summary, bestSellers }: Props) {
                 placeItems: 'center',
                 borderRadius: 2,
                 color: metric.color,
-                bgcolor: metric.softColor,
+                bgcolor: metric.background,
               }}
             >
               <Iconify icon={metric.icon} width={23} />
             </Box>
             <Box>
-              <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-                {metric.caption}
-              </Typography>
-              <Stack direction="row" spacing={0.5} alignItems="baseline" flexWrap="wrap">
-                <Typography variant="h4" sx={{ mt: 0.25 }}>
-                  {metric.value}
-                </Typography>
+              <Stack direction="row" alignItems="baseline" spacing={0.5} flexWrap="wrap">
+                <Typography variant="h4">{metric.value}</Typography>
                 {metric.unit && (
                   <Typography variant="caption" sx={{ color: 'text.secondary' }}>
                     {metric.unit}
@@ -331,22 +295,23 @@ export function AdminOverviewView({ summary, bestSellers }: Props) {
 
       <Box
         sx={{
-          overflow: 'hidden',
-          border: '1px solid',
-          borderColor: 'divider',
-          borderRadius: 3,
-          bgcolor: 'common.white',
-          boxShadow: '0 8px 28px rgba(33,43,54,0.05)',
+          display: 'grid',
+          gridTemplateColumns: { xs: '1fr', lg: '1.15fr 0.85fr' },
+          gap: 2,
+          mb: 2,
         }}
       >
-        <Stack
-          direction={{ xs: 'column', sm: 'row' }}
-          alignItems={{ xs: 'flex-start', sm: 'center' }}
-          justifyContent="space-between"
-          gap={2}
-          sx={{ px: { xs: 2, sm: 3 }, py: 2.5 }}
+        <Box
+          sx={{
+            overflow: 'hidden',
+            border: '1px solid',
+            borderColor: 'divider',
+            borderRadius: 3,
+            bgcolor: 'common.white',
+            boxShadow: '0 8px 28px rgba(33,43,54,0.05)',
+          }}
         >
-          <Stack direction="row" alignItems="center" spacing={1.25}>
+          <Stack direction="row" alignItems="center" spacing={1.25} sx={{ p: 2.5 }}>
             <Box
               sx={{
                 width: 44,
@@ -363,169 +328,311 @@ export function AdminOverviewView({ summary, bestSellers }: Props) {
             <Box>
               <Typography variant="h5">อันดับเมนูขายดี</Typography>
               <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-                เรียงตามจำนวนจานที่ขายได้ใน{periodMeta.label}
+                เรียงตามจำนวนที่ขายได้ · รวม {formatNumber(data.dishCount)} จาน
               </Typography>
             </Box>
           </Stack>
+          <Divider />
 
-          {items[0] && (
+          {data.bestSellers.length === 0 ? (
+            <Stack alignItems="center" spacing={1} sx={{ py: 7 }}>
+              <Iconify
+                icon={'solar:inbox-line-bold-duotone' as IconifyName}
+                width={38}
+                sx={{ color: 'text.disabled' }}
+              />
+              <Typography variant="h6">ยังไม่มีข้อมูลการขาย</Typography>
+            </Stack>
+          ) : (
+            <Stack divider={<Divider />} sx={{ px: 2.5, pb: 1 }}>
+              {data.bestSellers.map((item, index) => {
+                const percentage = (item.quantity / maxBestSeller) * 100;
+                const winner = index === 0;
+
+                return (
+                  <Box
+                    key={item.name}
+                    sx={{
+                      display: 'grid',
+                      gridTemplateColumns: '36px minmax(0, 1fr) auto',
+                      columnGap: 1.5,
+                      rowGap: 0.75,
+                      alignItems: 'center',
+                      py: 1.5,
+                    }}
+                  >
+                    <Box
+                      sx={{
+                        width: 34,
+                        height: 34,
+                        gridRow: '1 / 3',
+                        display: 'grid',
+                        placeItems: 'center',
+                        borderRadius: 1.5,
+                        color: winner ? 'warning.darker' : 'text.secondary',
+                        bgcolor: winner ? 'warning.lighter' : 'grey.100',
+                        fontWeight: 800,
+                      }}
+                    >
+                      {winner ? (
+                        <Iconify icon={'solar:crown-bold' as IconifyName} width={20} />
+                      ) : (
+                        index + 1
+                      )}
+                    </Box>
+                    <Typography variant="subtitle2" noWrap title={item.name}>
+                      {item.name}
+                    </Typography>
+                    <Box sx={{ textAlign: 'right' }}>
+                      <Typography variant="subtitle2">{formatNumber(item.quantity)} จาน</Typography>
+                      <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+                        {formatBaht(item.revenue)}
+                      </Typography>
+                    </Box>
+                    <Box
+                      sx={{ height: 8, overflow: 'hidden', borderRadius: 1, bgcolor: 'grey.100' }}
+                    >
+                      <Box
+                        sx={{
+                          width: `${percentage}%`,
+                          minWidth: 8,
+                          height: 1,
+                          bgcolor: winner ? 'warning.main' : 'primary.main',
+                        }}
+                      />
+                    </Box>
+                  </Box>
+                );
+              })}
+            </Stack>
+          )}
+        </Box>
+
+        <Box
+          sx={{
+            p: 2.5,
+            border: '1px solid',
+            borderColor: 'divider',
+            borderRadius: 3,
+            bgcolor: 'common.white',
+            boxShadow: '0 8px 28px rgba(33,43,54,0.05)',
+          }}
+        >
+          <Typography variant="h5">ช่วงเวลาที่ลูกค้าสั่ง</Typography>
+          <Typography variant="body2" sx={{ mt: 0.25, color: 'text.secondary' }}>
+            จำนวนออเดอร์แยกตามช่วงเวลา
+          </Typography>
+
+          {busiestTime && busiestTime.orderCount > 0 && (
             <Chip
-              icon={<Iconify icon={'solar:crown-bold' as IconifyName} width={17} />}
-              label={`อันดับ 1 · ${items[0].name}`}
-              sx={{
-                maxWidth: { xs: 1, sm: 280 },
-                color: 'warning.darker',
-                fontWeight: 700,
-                bgcolor: 'warning.lighter',
-                '& .MuiChip-label': { overflow: 'hidden', textOverflow: 'ellipsis' },
-                '& .MuiChip-icon': { color: 'inherit' },
-              }}
+              size="small"
+              icon={<Iconify icon="solar:clock-circle-bold" width={16} />}
+              label={`สั่งมากสุด ${busiestTime.label} · ${formatNumber(busiestTime.orderCount)} ออเดอร์`}
+              color="primary"
+              sx={{ mt: 1.5 }}
             />
           )}
+
+          <Stack spacing={1.65} sx={{ mt: 2.5 }}>
+            {data.timeTraffic.map((time) => (
+              <Box key={time.key}>
+                <Stack direction="row" justifyContent="space-between" spacing={1} sx={{ mb: 0.6 }}>
+                  <Typography variant="body2">{time.label}</Typography>
+                  <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+                    {formatNumber(time.orderCount)} ออเดอร์ · {formatBaht(time.revenue)}
+                  </Typography>
+                </Stack>
+                <Box sx={{ height: 9, overflow: 'hidden', borderRadius: 1, bgcolor: 'grey.100' }}>
+                  <Box
+                    sx={{
+                      width: `${(time.orderCount / maxTimeOrders) * 100}%`,
+                      minWidth: time.orderCount ? 9 : 0,
+                      height: 1,
+                      borderRadius: 1,
+                      bgcolor: 'primary.main',
+                    }}
+                  />
+                </Box>
+              </Box>
+            ))}
+          </Stack>
+        </Box>
+      </Box>
+
+      <Box
+        sx={{
+          p: { xs: 2, sm: 2.5 },
+          mb: 2,
+          border: '1px solid',
+          borderColor: 'divider',
+          borderRadius: 3,
+          bgcolor: 'common.white',
+          boxShadow: '0 8px 28px rgba(33,43,54,0.05)',
+        }}
+      >
+        <Typography variant="h5">เมนูขายดีแยกตามหมวดหมู่</Typography>
+        <Typography variant="body2" sx={{ mt: 0.25, color: 'text.secondary' }}>
+          ดู 3 อันดับแรกของแต่ละหมวด เพื่อเข้าใจว่าแต่ละกลุ่มขายอะไรดี
+        </Typography>
+
+        {data.categoryBestSellers.length === 0 ? (
+          <Typography variant="body2" sx={{ py: 5, color: 'text.secondary', textAlign: 'center' }}>
+            ยังไม่มีข้อมูลเมนูแยกตามหมวดหมู่
+          </Typography>
+        ) : (
+          <Box
+            sx={{
+              display: 'grid',
+              gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)', xl: 'repeat(3, 1fr)' },
+              gap: 1.5,
+              mt: 2.5,
+            }}
+          >
+            {data.categoryBestSellers.map((category) => (
+              <Box
+                key={category.category}
+                sx={{ p: 2, borderRadius: 2.5, border: '1px solid', borderColor: 'divider' }}
+              >
+                <Stack direction="row" alignItems="center" justifyContent="space-between" mb={1.5}>
+                  <Typography variant="h6">{category.label}</Typography>
+                  <Chip size="small" label={`${category.items.length} อันดับ`} variant="outlined" />
+                </Stack>
+                <Stack spacing={1.25}>
+                  {category.items.map((item, index) => (
+                    <Stack key={item.name} direction="row" alignItems="center" spacing={1.25}>
+                      <Box
+                        sx={{
+                          width: 28,
+                          height: 28,
+                          display: 'grid',
+                          placeItems: 'center',
+                          flexShrink: 0,
+                          borderRadius: 1,
+                          color: index === 0 ? 'warning.darker' : 'text.secondary',
+                          bgcolor: index === 0 ? 'warning.lighter' : 'grey.100',
+                          typography: 'caption',
+                          fontWeight: 800,
+                        }}
+                      >
+                        {index + 1}
+                      </Box>
+                      <Typography variant="body2" noWrap sx={{ flex: 1 }} title={item.name}>
+                        {item.name}
+                      </Typography>
+                      <Box sx={{ textAlign: 'right' }}>
+                        <Typography variant="subtitle2">
+                          {formatNumber(item.quantity)} จาน
+                        </Typography>
+                        <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+                          {formatBaht(item.revenue)}
+                        </Typography>
+                      </Box>
+                    </Stack>
+                  ))}
+                </Stack>
+              </Box>
+            ))}
+          </Box>
+        )}
+      </Box>
+
+      <Box
+        sx={{
+          p: { xs: 2, sm: 2.5 },
+          border: '1px solid',
+          borderColor: 'divider',
+          borderRadius: 3,
+          bgcolor: 'common.white',
+          boxShadow: '0 8px 28px rgba(33,43,54,0.05)',
+        }}
+      >
+        <Stack
+          direction={{ xs: 'column', sm: 'row' }}
+          alignItems={{ xs: 'flex-start', sm: 'center' }}
+          justifyContent="space-between"
+          spacing={1.5}
+        >
+          <Box>
+            <Typography variant="h5">ออเดอร์มาก–น้อยตามวัน</Typography>
+            <Typography variant="body2" sx={{ mt: 0.25, color: 'text.secondary' }}>
+              จำนวนออเดอร์ในแต่ละวัน ใช้ดูแนวโน้มช่วงที่ลูกค้าเยอะ
+            </Typography>
+          </Box>
+          <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap">
+            {busiestDay && (
+              <Chip
+                size="small"
+                color="success"
+                label={`มากสุด: ${busiestDay.label} ${formatNumber(busiestDay.orderCount)} ออเดอร์`}
+              />
+            )}
+            {quietestDay && (
+              <Chip
+                size="small"
+                variant="outlined"
+                label={`น้อยสุด: ${quietestDay.label} ${formatNumber(quietestDay.orderCount)} ออเดอร์`}
+              />
+            )}
+          </Stack>
         </Stack>
 
         <Box
           sx={{
             display: 'grid',
-            gridTemplateColumns: { xs: 'repeat(2, 1fr)', sm: 'repeat(3, 1fr)' },
-            mx: { xs: 2, sm: 3 },
-            mb: 2.5,
-            overflow: 'hidden',
-            borderRadius: 2,
-            border: '1px solid',
-            borderColor: 'divider',
-            bgcolor: 'grey.50',
+            gridTemplateColumns: { xs: 'repeat(2, 1fr)', sm: 'repeat(7, 1fr)' },
+            gap: 1,
+            alignItems: 'end',
+            mt: 3,
           }}
         >
-          {[
-            { label: 'ออเดอร์ทั้งหมด', value: `${formatNumber(selectedSummary.orderCount)} รายการ` },
-            { label: 'ยอดเฉลี่ย/ออเดอร์', value: formatBaht(averageOrder) },
-            { label: 'จานในอันดับ', value: `${formatNumber(totalDishes)} จาน` },
-          ].map((stat, index) => (
-            <Box
-              key={stat.label}
-              sx={{
-                px: { xs: 1.5, sm: 2.5 },
-                py: 1.5,
-                borderLeft: { xs: index % 2 ? '1px solid' : 0, sm: index ? '1px solid' : 0 },
-                borderTop: { xs: index === 2 ? '1px solid' : 0, sm: 0 },
-                borderColor: 'divider',
-                gridColumn: { xs: index === 2 ? '1 / -1' : 'auto', sm: 'auto' },
-              }}
-            >
-              <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-                {stat.label}
-              </Typography>
-              <Typography variant="subtitle1" sx={{ mt: 0.25 }}>
-                {stat.value}
-              </Typography>
-            </Box>
-          ))}
-        </Box>
+          {data.dayTraffic.map((day) => {
+            const height = day.observed ? Math.max((day.orderCount / maxDayOrders) * 100, 5) : 0;
+            const isBusiest = busiestDay?.key === day.key && day.orderCount > 0;
 
-        <Divider />
-
-        {items.length === 0 ? (
-          <Stack alignItems="center" spacing={1.25} sx={{ px: 2, py: { xs: 6, sm: 8 } }}>
-            <Box
-              sx={{
-                width: 68,
-                height: 68,
-                display: 'grid',
-                placeItems: 'center',
-                borderRadius: '50%',
-                color: 'text.disabled',
-                bgcolor: 'grey.100',
-              }}
-            >
-              <Iconify icon={'solar:inbox-line-bold-duotone' as IconifyName} width={34} />
-            </Box>
-            <Typography variant="h6">ยังไม่มีข้อมูลการขาย</Typography>
-            <Typography variant="body2" sx={{ maxWidth: 360, color: 'text.secondary', textAlign: 'center' }}>
-              เมื่อมีออเดอร์ใน{periodMeta.label} อันดับเมนูและรายได้จะแสดงที่นี่
-            </Typography>
-          </Stack>
-        ) : (
-          <Stack divider={<Divider />} sx={{ px: { xs: 2, sm: 3 }, pb: 1 }}>
-            {items.map((item, index) => {
-              const isTop = index === 0;
-              const percentage = maxQuantity ? (item.quantity / maxQuantity) * 100 : 0;
-
-              return (
+            return (
+              <Stack
+                key={day.key}
+                alignItems="center"
+                justifyContent="flex-end"
+                sx={{ minHeight: 190, opacity: day.observed ? 1 : 0.42 }}
+              >
+                <Typography variant="subtitle2">{formatNumber(day.orderCount)}</Typography>
+                <Typography variant="caption" sx={{ mb: 1, color: 'text.secondary' }}>
+                  ออเดอร์
+                </Typography>
                 <Box
-                  key={item.name}
                   sx={{
-                    display: 'grid',
-                    gridTemplateColumns: {
-                      xs: '38px minmax(0, 1fr) auto',
-                      sm: '38px minmax(160px, 220px) 1fr 120px',
-                    },
-                    columnGap: { xs: 1.25, sm: 2 },
-                    rowGap: 1,
-                    alignItems: 'center',
-                    px: isTop ? 1 : 0,
-                    py: 1.75,
-                    my: isTop ? 0.75 : 0,
-                    borderRadius: isTop ? 2 : 0,
-                    bgcolor: isTop ? '#FFFAE8' : 'transparent',
+                    width: { xs: 42, sm: 1 },
+                    maxWidth: 54,
+                    height: 105,
+                    display: 'flex',
+                    alignItems: 'flex-end',
+                    overflow: 'hidden',
+                    borderRadius: 1.5,
+                    bgcolor: 'grey.100',
                   }}
                 >
                   <Box
                     sx={{
-                      width: 34,
-                      height: 34,
-                      gridRow: { xs: '1 / 3', sm: 'auto' },
-                      display: 'grid',
-                      placeItems: 'center',
+                      width: 1,
+                      height: `${height}%`,
                       borderRadius: 1.5,
-                      color: isTop ? 'warning.darker' : 'text.secondary',
-                      bgcolor: isTop ? 'warning.lighter' : 'grey.100',
-                      typography: 'subtitle2',
+                      bgcolor: isBusiest ? 'success.main' : 'primary.main',
                     }}
-                  >
-                    {isTop ? (
-                      <Iconify icon={'solar:crown-bold' as IconifyName} width={20} />
-                    ) : (
-                      index + 1
-                    )}
-                  </Box>
-
-                  <Typography variant="subtitle2" noWrap title={item.name}>
-                    {item.name}
-                  </Typography>
-
-                  <Box
-                    sx={{
-                      gridColumn: { xs: '2 / -1', sm: 'auto' },
-                      gridRow: { xs: 2, sm: 'auto' },
-                      height: 9,
-                      overflow: 'hidden',
-                      borderRadius: 1,
-                      bgcolor: 'grey.100',
-                    }}
-                  >
-                    <Box
-                      sx={{
-                        width: `${percentage}%`,
-                        minWidth: 9,
-                        height: 1,
-                        borderRadius: 1,
-                        bgcolor: isTop ? 'warning.main' : 'primary.main',
-                      }}
-                    />
-                  </Box>
-
-                  <Box sx={{ textAlign: 'right' }}>
-                    <Typography variant="subtitle2">{formatNumber(item.quantity)} จาน</Typography>
-                    <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-                      {formatBaht(item.revenue)}
-                    </Typography>
-                  </Box>
+                  />
                 </Box>
-              );
-            })}
-          </Stack>
-        )}
+                <Typography variant="caption" sx={{ mt: 1, fontWeight: 700 }}>
+                  {day.label}
+                </Typography>
+                {!day.observed && (
+                  <Typography variant="caption" sx={{ color: 'text.disabled' }}>
+                    ไม่มีข้อมูล
+                  </Typography>
+                )}
+              </Stack>
+            );
+          })}
+        </Box>
       </Box>
     </Box>
   );

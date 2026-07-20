@@ -20,6 +20,7 @@ import { Iconify } from 'src/components/iconify';
 import { useConfirmDialog } from 'src/components/custom-dialog';
 
 import { useNewOrderAlert } from 'src/sections/admin/orders/use-new-order-alert';
+import { useOrdersRealtime } from 'src/sections/admin/orders/use-orders-realtime';
 import { listOpenTableSessions } from 'src/sections/admin/orders/table-session-actions';
 import { listOrdersAdmin, updateOrderStatus } from 'src/sections/admin/orders/order-admin-actions';
 import {
@@ -31,8 +32,6 @@ import {
 import { StaffManageOrdersDialog } from './staff-manage-orders-dialog';
 
 // ----------------------------------------------------------------------
-
-const POLL_INTERVAL_MS = 5000;
 
 const STATUS_STYLE: Record<OrderStatus, { accent: string; soft: string; icon: IconifyName }> = {
   pending: { accent: '#B76E00', soft: '#FFF6DD', icon: 'solar:clock-circle-bold' },
@@ -72,37 +71,38 @@ export function StaffOrdersView({ mode, initialOrders, initialSessions }: Props)
   const [now, setNow] = useState<number | null>(null);
   const { confirm, dialog } = useConfirmDialog();
 
-  const orderIds = useMemo(() => orders.map((order) => order.id), [orders]);
-  useNewOrderAlert(orderIds);
+  const orderIds = useMemo(
+    () => orders.filter((order) => order.orderType === mode).map((order) => order.id),
+    [mode, orders]
+  );
+  useNewOrderAlert(orderIds, {
+    showSnackbar: true,
+    showBrowserNotification: true,
+    title: mode === 'dine-in' ? 'มีออเดอร์ในร้านใหม่!' : 'มีออเดอร์กลับบ้านใหม่!',
+  });
 
   const refreshBoard = useCallback(async () => {
-    const [nextOrders, nextSessions] = await Promise.all([
-      listOrdersAdmin(),
-      listOpenTableSessions(),
-    ]);
-    setOrders(nextOrders);
-    setSessions(nextSessions);
-    setNow(Date.now());
+    try {
+      const [nextOrders, nextSessions] = await Promise.all([
+        listOrdersAdmin(),
+        listOpenTableSessions(),
+      ]);
+      setOrders(nextOrders);
+      setSessions(nextSessions);
+    } catch (error) {
+      console.error(error);
+    }
   }, []);
 
+  useOrdersRealtime({ onChange: refreshBoard });
+
+  // Ticks the "waited X minutes" labels independent of data refresh — realtime
+  // events fire on order changes, not on a clock, so this keeps them live.
   useEffect(() => {
-    let active = true;
-
-    const tick = async () => {
-      try {
-        if (active) await refreshBoard();
-      } catch (error) {
-        console.error(error);
-      }
-    };
-
     setNow(Date.now());
-    const interval = setInterval(tick, POLL_INTERVAL_MS);
-    return () => {
-      active = false;
-      clearInterval(interval);
-    };
-  }, [refreshBoard]);
+    const interval = setInterval(() => setNow(Date.now()), 15000);
+    return () => clearInterval(interval);
+  }, []);
 
   const takeawayOrders = useMemo(
     () => orders.filter((order) => order.orderType === 'takeaway'),

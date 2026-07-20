@@ -129,10 +129,47 @@ export async function moveCategoryRecord(id: string, direction: 'up' | 'down'): 
   const supabase = getSupabaseAdmin();
 
   const [{ error: errorA }, { error: errorB }] = await Promise.all([
-    supabase.from('menu_categories').update({ sort_order: neighbor.sortOrder }).eq('id', current.id),
-    supabase.from('menu_categories').update({ sort_order: current.sortOrder }).eq('id', neighbor.id),
+    supabase
+      .from('menu_categories')
+      .update({ sort_order: neighbor.sortOrder })
+      .eq('id', current.id),
+    supabase
+      .from('menu_categories')
+      .update({ sort_order: current.sortOrder })
+      .eq('id', neighbor.id),
   ]);
 
   if (errorA) throw errorA;
   if (errorB) throw errorB;
+}
+
+/** Persists the complete customer-facing category order after drag and drop. */
+export async function reorderCategoryRecords(orderedIds: string[]): Promise<void> {
+  const supabase = getSupabaseAdmin();
+  const { data: currentCategories, error: fetchError } = await supabase
+    .from('menu_categories')
+    .select('id');
+
+  if (fetchError) throw fetchError;
+
+  const currentIds = new Set((currentCategories ?? []).map((category) => category.id));
+  if (
+    orderedIds.length !== currentIds.size ||
+    new Set(orderedIds).size !== orderedIds.length ||
+    orderedIds.some((id) => !currentIds.has(id))
+  ) {
+    throw new CategoryValidationError('รายการหมวดหมู่มีการเปลี่ยนแปลง กรุณารีเฟรชแล้วลองใหม่');
+  }
+
+  const results = await Promise.all(
+    orderedIds.map((id, index) =>
+      supabase
+        .from('menu_categories')
+        .update({ sort_order: index + 1 })
+        .eq('id', id)
+    )
+  );
+  const failed = results.find((result) => result.error);
+
+  if (failed?.error) throw failed.error;
 }
